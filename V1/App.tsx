@@ -119,71 +119,75 @@ const App: React.FC = () => {
 
   const handleAddExpense = async (entry: ExpenseEntry) => {
     try {
-      await fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, entry] }));
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Failed to save expense");
+      alert("Failed to save expense: " + e.message);
     }
   };
 
   const handleAddExpenses = async (entries: ExpenseEntry[]) => {
-    // Batch add or loop
     try {
-        await Promise.all(entries.map(e => fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(e) })));
+        await Promise.all(entries.map(async e => {
+           const res = await fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(e) });
+           if (!res.ok) throw new Error(await res.text());
+        }));
         setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, ...entries] }));
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); alert("Failed to save expenses: " + e.message); }
   };
 
   const handleUpdateExpense = async (entry: ExpenseEntry) => {
     try {
-      // Upsert logic same as income? Or update specific fields?
-      // Since we don't have a PUT endpoint yet for expense (POST inserts), we need to update api/expenses.ts to handle Update.
-      // But actually, usually API uses POST/PUT. My api/expenses.ts only handles POST (insert) and DELETE.
-      // I need to update api/expenses.ts to handle PUT or check ID.
-      // For now, let's assume I fix the API first.
-      await fetch('/api/expenses', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/expenses', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, expenseEntries: prev.expenseEntries.map(e => e.id === entry.id ? entry : e) }));
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); alert("Failed to update expense: " + e.message); }
   };
 
   const handleAddIncome = async (entry: IncomeEntry) => {
     try {
-      await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, incomeEntries: [...prev.incomeEntries, entry] }));
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); alert("Failed to save income: " + e.message); }
   };
 
   const handleUpdateIncome = async (entry: IncomeEntry) => {
     try {
-      await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) }); // Upsert
+      const res = await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, incomeEntries: prev.incomeEntries.map(i => i.id === entry.id ? entry : i) }));
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); alert("Failed to update income: " + e.message); }
   };
 
   const handleDeleteExpense = async (id: string) => {
     try {
-      await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ 
         ...prev, 
         expenseEntries: prev.expenseEntries.filter(e => e.id !== id),
         outstandingExpenses: prev.outstandingExpenses.filter(o => o.expenseId !== id)
       }));
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); alert("Failed to delete expense: " + e.message); }
   };
 
   const handleDeleteIncome = async (id: string) => {
     try {
-      await fetch(`/api/incomes?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/incomes?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, incomeEntries: prev.incomeEntries.filter(i => i.id !== id) }));
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); alert("Failed to delete income: " + e.message); }
   };
 
   const handleAddOutstanding = async (entry: OutstandingExpense) => {
     try {
-      await fetch('/api/outstanding', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/outstanding', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, outstandingExpenses: [...prev.outstandingExpenses, entry] }));
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); alert("Failed to save outstanding: " + e.message); }
   };
 
   const handleSettleOutstanding = async (id: string, amountToPay: number) => {
