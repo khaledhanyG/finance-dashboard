@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppState, ExpenseEntry, IncomeEntry, OutstandingExpense, Task, User } from './types';
+import { AppState, ExpenseEntry, IncomeEntry, OutstandingExpense, Task } from './types';
 import { INITIAL_STATE } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { Settings } from './components/Settings';
@@ -8,14 +8,14 @@ import { Transactions } from './components/Transactions';
 import { Reports } from './components/Reports';
 import { Tasks } from './components/Tasks';
 import { DeleteModal } from './components/DeleteModal';
-import { Login } from './components/Login';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem('finpulse_state');
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...INITIAL_STATE, ...parsed, currentUser: null }; // Force re-login on refresh
+      // Merging with INITIAL_STATE ensures new properties like 'tasks' exist in old saved data
+      return { ...INITIAL_STATE, ...parsed };
     }
     return INITIAL_STATE;
   });
@@ -34,27 +34,11 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    // Persist everything except the current user session
-    const { currentUser, ...persistData } = state;
-    localStorage.setItem('finpulse_state', JSON.stringify(persistData));
+    localStorage.setItem('finpulse_state', JSON.stringify(state));
   }, [state]);
 
   const updateState = (newState: Partial<AppState>) => {
     setState(prev => ({ ...prev, ...newState }));
-  };
-
-  const handleLogin = (email: string, pass: string): boolean => {
-    const user = state.users.find(u => u.email === email && u.password === pass);
-    if (user) {
-      setState(prev => ({ ...prev, currentUser: user }));
-      return true;
-    }
-    return false;
-  };
-
-  const handleLogout = () => {
-    setState(prev => ({ ...prev, currentUser: null }));
-    setActivePage('dashboard');
   };
 
   const triggerDelete = useCallback((itemName: string, onConfirm: () => void) => {
@@ -137,22 +121,13 @@ const App: React.FC = () => {
     });
   };
 
-  if (!state.currentUser) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  const role = state.currentUser.role;
-  const isViewer = role === 'viewer';
-
   const navLinks = [
-    { id: 'dashboard', icon: 'fa-gauge-high', label: 'Overview', show: true },
-    { id: 'transactions', icon: 'fa-file-invoice-dollar', label: 'Accounting', show: role !== 'viewer' },
-    { id: 'tasks', icon: 'fa-list-check', label: 'Tasks', show: role !== 'viewer' },
-    { id: 'reports', icon: 'fa-file-contract', label: 'Reports', show: true },
-    { id: 'settings', icon: 'fa-sliders', label: role === 'admin' ? 'Organization' : 'My Profile', show: true }
+    { id: 'dashboard', icon: 'fa-gauge-high', label: 'Dashboard' },
+    { id: 'transactions', icon: 'fa-file-invoice-dollar', label: 'Accounting' },
+    { id: 'tasks', icon: 'fa-list-check', label: 'Tasks' },
+    { id: 'reports', icon: 'fa-file-contract', label: 'Reports' },
+    { id: 'settings', icon: 'fa-sliders', label: 'Organization' }
   ];
-
-  const visibleNavLinks = navLinks.filter(l => l.show);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -173,7 +148,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="hidden md:flex items-center gap-1">
-            {visibleNavLinks.map((nav) => (
+            {navLinks.map((nav) => (
               <button
                 key={nav.id}
                 onClick={() => setActivePage(nav.id as any)}
@@ -191,15 +166,9 @@ const App: React.FC = () => {
 
           <div className="hidden md:flex items-center gap-4 border-l border-white/10 pl-6 ml-2">
             <div className="text-right">
-              <p className="text-[10px] text-white font-black uppercase tracking-widest">{state.currentUser.name}</p>
-              <p className="text-[9px] text-indigo-300 font-bold uppercase tracking-[0.2em]">{state.currentUser.role}</p>
+              <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-widest">{new Date().toLocaleDateString('en-SA', { month: 'short', day: 'numeric' })}</p>
+              <p className="text-[9px] text-white/50 font-medium">FINANCIAL YEAR 2024</p>
             </div>
-            <button 
-              onClick={handleLogout}
-              className="w-10 h-10 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-indigo-200 transition-all flex items-center justify-center border border-white/5"
-            >
-              <i className="fas fa-power-off text-sm"></i>
-            </button>
           </div>
 
           <button 
@@ -212,7 +181,7 @@ const App: React.FC = () => {
 
         {isMobileMenuOpen && (
           <div className="md:hidden border-t border-white/10 bg-indigo-950 p-4 space-y-2 animate-fadeIn">
-            {visibleNavLinks.map((nav) => (
+            {navLinks.map((nav) => (
               <button
                 key={nav.id}
                 onClick={() => { setActivePage(nav.id as any); setIsMobileMenuOpen(false); }}
@@ -224,24 +193,27 @@ const App: React.FC = () => {
                 {nav.label}
               </button>
             ))}
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm uppercase text-rose-400 border border-rose-900/50 mt-4"
-            >
-              <i className="fas fa-power-off w-6"></i>
-              Logout
-            </button>
           </div>
         )}
       </nav>
 
       <div className="flex-1 flex flex-col max-w-[1600px] mx-auto w-full">
         <main className="flex-1 p-4 md:p-8">
+          <div className="mb-8 flex items-center gap-3">
+             <div className="h-8 w-1.5 bg-indigo-600 rounded-full"></div>
+             <div>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                  {navLinks.find(n => n.id === activePage)?.label}
+                </h2>
+                <div className="h-0.5 w-12 bg-slate-200 mt-1"></div>
+             </div>
+          </div>
+          
           {activePage === 'dashboard' && <Dashboard state={state} />}
           {activePage === 'settings' && <Settings state={state} onUpdate={updateState} onDelete={triggerDelete} />}
           {activePage === 'reports' && <Reports state={state} />}
-          {activePage === 'tasks' && role !== 'viewer' && <Tasks state={state} onUpdate={updateState} onDelete={triggerDelete} />}
-          {activePage === 'transactions' && role !== 'viewer' && (
+          {activePage === 'tasks' && <Tasks state={state} onUpdate={updateState} onDelete={triggerDelete} />}
+          {activePage === 'transactions' && (
             <Transactions 
               state={state} 
               onAddExpense={handleAddExpense} 
@@ -261,9 +233,6 @@ const App: React.FC = () => {
               onSettleOutstanding={handleSettleOutstanding}
             />
           )}
-          {activePage === 'tasks' && role === 'viewer' && (
-            <div className="py-20 text-center text-slate-400">View-only mode active. Assignments restricted.</div>
-          )}
         </main>
       </div>
 
@@ -277,7 +246,7 @@ const App: React.FC = () => {
               <i className="fas fa-shield-halved"></i> SECURE ENCRYPTED DATA
             </span>
             <span className="text-[10px] text-slate-300 font-bold uppercase tracking-tighter flex items-center gap-2">
-              <i className="fas fa-user-lock"></i> ROLE: {state.currentUser.role.toUpperCase()}
+              <i className="fas fa-microchip"></i> AI CORE V3
             </span>
           </div>
         </div>

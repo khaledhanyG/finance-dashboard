@@ -1,15 +1,4 @@
 
-export type UserRole = 'admin' | 'editor' | 'viewer';
-
-export interface User {
-  id: string;
-  email: string;
-  password?: string;
-  name: string;
-  role: UserRole;
-  avatar?: string;
-}
-
 export interface Department {
   id: string;
   name: string;
@@ -81,7 +70,7 @@ export interface IncomeEntry {
   id: string;
   date: string;
   serviceId: string;
-  departmentId?: string;
+  departmentId?: string; // Made optional as it's removed from form
   type?: 'revenue' | 'refund';
   amount: number; 
   ordersCount: string; 
@@ -105,8 +94,6 @@ export interface Task {
 }
 
 export interface AppState {
-  users: User[];
-  currentUser: User | null;
   departments: Department[];
   employees: Employee[];
   expenseGroups: ExpenseGroup[];

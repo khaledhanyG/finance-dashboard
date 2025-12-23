@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { AppState, Department, Employee, ExpenseGroup, ExpenseCategory, IncomeService, User, UserRole } from '../types';
+import { AppState, Department, Employee, ExpenseGroup, ExpenseCategory, IncomeService } from '../types';
 
 interface SettingsProps {
   state: AppState;
@@ -9,9 +9,7 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete }) => {
-  const [activeTab, setActiveTab] = useState<'employees' | 'departments' | 'expenses' | 'income' | 'users' | 'profile'>('departments');
-
-  const isAdmin = state.currentUser?.role === 'admin';
+  const [activeTab, setActiveTab] = useState<'employees' | 'departments' | 'expenses' | 'income'>('departments');
 
   const updateItem = <T extends { id: string }>(key: keyof AppState, updatedItem: T) => {
     onUpdate({ [key]: (state[key] as any[]).map((item: any) => item.id === updatedItem.id ? updatedItem : item) });
@@ -25,21 +23,17 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
     onUpdate({ [key]: (state[key] as any[]).filter((item: any) => item.id !== id) });
   };
 
-  const sidebarTabs = [
-    { id: 'profile', icon: 'fa-user-circle', label: 'My Profile', show: true },
-    { id: 'departments', icon: 'fa-sitemap', label: 'Departments', show: isAdmin },
-    { id: 'employees', icon: 'fa-users', label: 'Employees', show: isAdmin },
-    { id: 'expenses', icon: 'fa-tags', label: 'Expense Groups', show: isAdmin },
-    { id: 'income', icon: 'fa-hand-holding-dollar', label: 'Income Services', show: isAdmin },
-    { id: 'users', icon: 'fa-user-shield', label: 'Access Control', show: isAdmin },
-  ];
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-100 min-h-[600px] flex flex-col md:flex-row overflow-hidden animate-fadeIn">
       <div className="w-full md:w-64 bg-slate-50 border-r border-slate-100 p-4">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 px-2 text-center md:text-left">Configuration</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 px-2 text-center md:text-left">Setup</h3>
         <nav className="space-y-1">
-          {sidebarTabs.filter(t => t.show).map((tab) => (
+          {[
+            { id: 'departments', icon: 'fa-sitemap', label: 'Departments' },
+            { id: 'employees', icon: 'fa-users', label: 'Employees' },
+            { id: 'expenses', icon: 'fa-tags', label: 'Expense Groups' },
+            { id: 'income', icon: 'fa-hand-holding-dollar', label: 'Income Services' },
+          ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
@@ -54,19 +48,8 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
         </nav>
       </div>
 
-      <div className="flex-1 p-8 overflow-y-auto max-h-[700px]">
-        {activeTab === 'profile' && (
-          <ProfileManager 
-            user={state.currentUser!} 
-            onUpdate={(updated) => {
-              onUpdate({ 
-                currentUser: updated,
-                users: state.users.map(u => u.id === updated.id ? updated : u)
-              });
-            }} 
-          />
-        )}
-        {activeTab === 'departments' && isAdmin && (
+      <div className="flex-1 p-8">
+        {activeTab === 'departments' && (
           <DepartmentManager 
             items={state.departments} 
             onAdd={(name) => addItem('departments', { id: `dept-${Date.now()}`, name })}
@@ -74,7 +57,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
             onRemove={(dept) => onDelete(dept.name, () => removeItem('departments', dept.id))}
           />
         )}
-        {activeTab === 'employees' && isAdmin && (
+        {activeTab === 'employees' && (
           <EmployeeManager 
             items={state.employees} 
             departments={state.departments}
@@ -84,7 +67,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
             onRemove={(emp) => onDelete(emp.name, () => removeItem('employees', emp.id))}
           />
         )}
-        {activeTab === 'expenses' && isAdmin && (
+        {activeTab === 'expenses' && (
           <ExpenseStructureManager 
             groups={state.expenseGroups}
             categories={state.expenseCategories}
@@ -101,7 +84,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
             onRemoveCategory={(cat) => onDelete(cat.name, () => removeItem('expenseCategories', cat.id))}
           />
         )}
-        {activeTab === 'income' && isAdmin && (
+        {activeTab === 'income' && (
           <IncomeServiceManager 
             items={state.incomeServices}
             onAdd={(name) => addItem('incomeServices', { id: `svc-${Date.now()}`, name })}
@@ -109,112 +92,6 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
             onRemove={(svc) => onDelete(svc.name, () => removeItem('incomeServices', svc.id))}
           />
         )}
-        {activeTab === 'users' && isAdmin && (
-          <UserManager 
-            users={state.users}
-            onAdd={(name, email, password, role) => addItem('users', { id: `user-${Date.now()}`, name, email, password, role })}
-            onUpdate={(user) => updateItem('users', user)}
-            onRemove={(user) => onDelete(user.name, () => removeItem('users', user.id))}
-          />
-        )}
-      </div>
-    </div>
-  );
-};
-
-const ProfileManager: React.FC<{ user: User, onUpdate: (u: User) => void }> = ({ user, onUpdate }) => {
-  const [form, setForm] = useState({ ...user, password: user.password || '' });
-  const [message, setMessage] = useState('');
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdate(form);
-    setMessage('Profile updated successfully!');
-    setTimeout(() => setMessage(''), 3000);
-  };
-
-  return (
-    <div className="max-w-xl space-y-6">
-      <h4 className="text-xl font-bold text-slate-800">My Profile</h4>
-      <form onSubmit={handleSave} className="space-y-4">
-        <div>
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Display Name</label>
-          <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full border rounded-xl px-4 py-2.5 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Email Address</label>
-          <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full border rounded-xl px-4 py-2.5 text-sm bg-slate-50 cursor-not-allowed" disabled />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Login Password</label>
-          <input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} className="w-full border rounded-xl px-4 py-2.5 text-sm" />
-        </div>
-        <button type="submit" className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md">Update Profile</button>
-        {message && <p className="text-emerald-600 text-sm font-bold animate-fadeIn">{message}</p>}
-      </form>
-    </div>
-  );
-};
-
-const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: string, r: UserRole) => void, onUpdate: (u: User) => void, onRemove: (u: User) => void }> = ({ users, onAdd, onUpdate, onRemove }) => {
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'viewer' as UserRole });
-  
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(form.name && form.email && form.password) {
-      onAdd(form.name, form.email, form.password, form.role);
-      setForm({ name: '', email: '', password: '', role: 'viewer' });
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <h4 className="text-xl font-bold text-slate-800">Access Control</h4>
-      <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
-        <input placeholder="Full Name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="border rounded-lg px-3 py-2 text-sm" required />
-        <input placeholder="Email" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="border rounded-lg px-3 py-2 text-sm" required />
-        <input placeholder="Password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} className="border rounded-lg px-3 py-2 text-sm" required />
-        <select value={form.role} onChange={e => setForm({...form, role: e.target.value as any})} className="border rounded-lg px-3 py-2 text-sm">
-          <option value="viewer">Viewer (Read Only)</option>
-          <option value="editor">Editor (Modify Entries)</option>
-        </select>
-        <button type="submit" className="md:col-span-4 bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest">Create New Account</button>
-      </form>
-
-      <div className="overflow-x-auto border border-slate-100 rounded-xl">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
-            <tr>
-              <th className="px-4 py-3">User</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="font-bold text-slate-700">{u.name}</div>
-                  <div className="text-[10px] text-slate-400">{u.email}</div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                    u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
-                    u.role === 'editor' ? 'bg-amber-100 text-amber-700' :
-                    'bg-slate-100 text-slate-600'
-                  }`}>
-                    {u.role}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {u.role !== 'admin' && (
-                    <button onClick={() => onRemove(u)} className="text-rose-400 hover:text-rose-600 p-2"><i className="fas fa-trash-can"></i></button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );
@@ -302,22 +179,22 @@ const EmployeeManager: React.FC<{
       <h4 className="text-xl font-bold text-slate-800">Employees</h4>
       
       <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-4 bg-slate-50 rounded-xl border border-slate-100">
-        <input type="text" placeholder="Name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" required/>
-        <input type="text" placeholder="Employee #" value={form.employeeNumber} onChange={e => setForm({...form, employeeNumber: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" required/>
-        <select value={form.deptId} onChange={e => setForm({...form, deptId: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+        <input type="text" placeholder="Name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2" required/>
+        <input type="text" placeholder="Employee #" value={form.employeeNumber} onChange={e => setForm({...form, employeeNumber: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2" required/>
+        <select value={form.deptId} onChange={e => setForm({...form, deptId: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2" required>
           <option value="">Select Department</option>
           {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
-        <input type="text" placeholder="Nationality" value={form.nationality} onChange={e => setForm({...form, nationality: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" required/>
+        <input type="text" placeholder="Nationality" value={form.nationality} onChange={e => setForm({...form, nationality: e.target.value})} className="border border-slate-200 rounded-lg px-3 py-2" required/>
         <div className="relative">
-          <input type="number" placeholder="Salary" value={form.salary} onChange={e => setForm({...form, salary: e.target.value})} className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-12 text-sm" required/>
+          <input type="number" placeholder="Salary" value={form.salary} onChange={e => setForm({...form, salary: e.target.value})} className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-12" required/>
           <span className="absolute right-3 top-2 text-[10px] font-bold text-slate-400">SAR</span>
         </div>
         <div className="flex items-center gap-2 px-3">
           <input type="checkbox" id="is_active_new" checked={form.isActive} onChange={e => setForm({...form, isActive: e.target.checked})} className="rounded text-indigo-600"/>
           <label htmlFor="is_active_new" className="text-sm text-slate-600">Active Status</label>
         </div>
-        <button type="submit" className="lg:col-span-3 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm mt-2 font-bold text-xs uppercase tracking-widest">Add Employee</button>
+        <button type="submit" className="lg:col-span-3 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm mt-2">Add Employee</button>
       </form>
 
       <div className="relative">
@@ -327,12 +204,12 @@ const EmployeeManager: React.FC<{
           placeholder="Search by name, #, department..." 
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
         />
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-left">
           <thead>
             <tr className="bg-slate-50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
               <th className="py-3 px-4">#</th>
@@ -385,6 +262,7 @@ const EmployeeManager: React.FC<{
                 </td>
               </tr>
             ))}
+            {filteredItems.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-slate-400 italic">No employees found.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -418,12 +296,12 @@ const ExpenseStructureManager: React.FC<{
       <div>
         <h4 className="text-xl font-bold text-slate-800 mb-4">Expense Groups</h4>
         <form onSubmit={handleAddGroup} className="flex flex-wrap gap-2 items-center bg-slate-50 p-4 rounded-xl mb-4 border border-slate-100">
-          <input type="text" placeholder="Group Name" value={gName} onChange={e => setGName(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-100"/>
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer font-bold uppercase text-[10px]">
+          <input type="text" placeholder="Group Name" value={gName} onChange={e => setGName(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-100"/>
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
             <input type="checkbox" checked={isCOGS} onChange={e => setIsCOGS(e.target.checked)} className="rounded text-indigo-600"/>
-            COGS Category
+            Mark as COGS
           </label>
-          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm font-bold text-[10px] uppercase">Add Group</button>
+          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">Add Group</button>
         </form>
         <div className="grid grid-cols-1 gap-4">
           {groups.map(group => (
@@ -443,9 +321,9 @@ const ExpenseStructureManager: React.FC<{
                   <input 
                     type="text" placeholder="Add Category..." value={cNames[group.id] || ''} 
                     onChange={e => setCNames({...cNames, [group.id]: e.target.value})}
-                    className="flex-1 border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-slate-300"
+                    className="flex-1 border border-slate-100 rounded-lg px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-slate-300"
                   />
-                  <button type="submit" className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors uppercase">ADD</button>
+                  <button type="submit" className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors">ADD</button>
                 </form>
                 <div className="flex flex-wrap gap-2">
                   {categories.filter(c => c.groupId === group.id).map(cat => (
@@ -463,6 +341,7 @@ const ExpenseStructureManager: React.FC<{
               </div>
             </div>
           ))}
+          {groups.length === 0 && <div className="p-8 text-center text-slate-400 italic border border-dashed border-slate-200 rounded-xl">Define your expense structure above.</div>}
         </div>
       </div>
     </div>
@@ -484,9 +363,9 @@ const IncomeServiceManager: React.FC<{ items: IncomeService[], onAdd: (n: string
       <form onSubmit={handleAdd} className="flex gap-2">
         <input 
           type="text" placeholder="Service Name" value={name} onChange={e => setName(e.target.value)}
-          className="flex-1 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-100 text-sm"
+          className="flex-1 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-100"
         />
-        <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm font-bold text-xs uppercase tracking-widest">Add Service</button>
+        <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">Add Service</button>
       </form>
       <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {items.map(svc => (
@@ -502,6 +381,7 @@ const IncomeServiceManager: React.FC<{ items: IncomeService[], onAdd: (n: string
             </div>
           </li>
         ))}
+        {items.length === 0 && <li className="col-span-full p-8 text-center text-slate-400 italic">No income services added yet.</li>}
       </ul>
     </div>
   );
