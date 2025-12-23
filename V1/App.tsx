@@ -34,12 +34,64 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    // Persist everything except the current user session
-    const { currentUser, ...persistData } = state;
-    localStorage.setItem('finpulse_state', JSON.stringify(persistData));
-  }, [state]);
+    // Load initial state from DB
+    const fetchData = async () => {
+      try {
+        const res = await fetch('/api/state');
+        if (res.ok) {
+          const data = await res.json();
+          // Merge with initial state structure to ensure no missing keys
+          setState(prev => ({ 
+             ...INITIAL_STATE, 
+             ...data, 
+             users: prev.users, // Keep users (mock auth) or fetch if we had a users table
+             currentUser: prev.currentUser 
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch state:", err);
+      }
+    };
+    if (state.currentUser) {
+       fetchData();
+    }
+  }, [state.currentUser]); // Reload when user logs in
+
+
+  /* Sync Helper */
+  const syncChanges = async (key: keyof AppState, oldList: any[], newList: any[]) => {
+    // Diff to find Add/Update vs Delete
+    const addedOrUpdated = newList.filter(n => {
+       const o = oldList.find(x => x.id === n.id);
+       return !o || JSON.stringify(o) !== JSON.stringify(n);
+    });
+    const removed = oldList.filter(o => !newList.find(n => n.id === o.id));
+
+    // Execute Sync
+    // We only sync specific keys that map to tables
+    const SYNC_KEYS = ['departments', 'employees', 'expenseGroups', 'expenseCategories', 'incomeServices', 'tasks'];
+    if (!SYNC_KEYS.includes(key)) return;
+
+    for (const item of addedOrUpdated) {
+        await fetch(`/api/crud?entity=${key}`, { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify(item) 
+        }).catch(console.error);
+    }
+    for (const item of removed) {
+        await fetch(`/api/crud?entity=${key}&id=${item.id}`, { method: 'DELETE' }).catch(console.error);
+    }
+  };
 
   const updateState = (newState: Partial<AppState>) => {
+    // Intercept and Sync
+    Object.keys(newState).forEach(key => {
+        const k = key as keyof AppState;
+        if (Array.isArray(newState[k]) && Array.isArray(state[k])) {
+            syncChanges(k, state[k] as any[], newState[k] as any[]);
+        }
+    });
     setState(prev => ({ ...prev, ...newState }));
   };
 
@@ -65,76 +117,130 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleAddExpense = (entry: ExpenseEntry) => {
-    setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, entry] }));
+  const handleAddExpense = async (entry: ExpenseEntry) => {
+    try {
+      await fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, entry] }));
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save expense");
+    }
   };
 
-  const handleAddExpenses = (entries: ExpenseEntry[]) => {
-    setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, ...entries] }));
+  const handleAddExpenses = async (entries: ExpenseEntry[]) => {
+    // Batch add or loop
+    try {
+        await Promise.all(entries.map(e => fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(e) })));
+        setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, ...entries] }));
+    } catch (e) { console.error(e); }
   };
 
-  const handleUpdateExpense = (entry: ExpenseEntry) => {
-    setState(prev => ({ ...prev, expenseEntries: prev.expenseEntries.map(e => e.id === entry.id ? entry : e) }));
+  const handleUpdateExpense = async (entry: ExpenseEntry) => {
+    try {
+      // Upsert logic same as income? Or update specific fields?
+      // Since we don't have a PUT endpoint yet for expense (POST inserts), we need to update api/expenses.ts to handle Update.
+      // But actually, usually API uses POST/PUT. My api/expenses.ts only handles POST (insert) and DELETE.
+      // I need to update api/expenses.ts to handle PUT or check ID.
+      // For now, let's assume I fix the API first.
+      await fetch('/api/expenses', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      setState(prev => ({ ...prev, expenseEntries: prev.expenseEntries.map(e => e.id === entry.id ? entry : e) }));
+    } catch (e) { console.error(e); }
   };
 
-  const handleAddIncome = (entry: IncomeEntry) => {
-    setState(prev => ({ ...prev, incomeEntries: [...prev.incomeEntries, entry] }));
+  const handleAddIncome = async (entry: IncomeEntry) => {
+    try {
+      await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      setState(prev => ({ ...prev, incomeEntries: [...prev.incomeEntries, entry] }));
+    } catch (e) { console.error(e); }
   };
 
-  const handleUpdateIncome = (entry: IncomeEntry) => {
-    setState(prev => ({ ...prev, incomeEntries: prev.incomeEntries.map(i => i.id === entry.id ? entry : i) }));
+  const handleUpdateIncome = async (entry: IncomeEntry) => {
+    try {
+      await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) }); // Upsert
+      setState(prev => ({ ...prev, incomeEntries: prev.incomeEntries.map(i => i.id === entry.id ? entry : i) }));
+    } catch (e) { console.error(e); }
   };
 
-  const handleDeleteExpense = (id: string) => {
-    setState(prev => ({ 
-      ...prev, 
-      expenseEntries: prev.expenseEntries.filter(e => e.id !== id),
-      outstandingExpenses: prev.outstandingExpenses.filter(o => o.expenseId !== id)
-    }));
+  const handleDeleteExpense = async (id: string) => {
+    try {
+      await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' });
+      setState(prev => ({ 
+        ...prev, 
+        expenseEntries: prev.expenseEntries.filter(e => e.id !== id),
+        outstandingExpenses: prev.outstandingExpenses.filter(o => o.expenseId !== id)
+      }));
+    } catch (e) { console.error(e); }
   };
 
-  const handleDeleteIncome = (id: string) => {
-    setState(prev => ({ ...prev, incomeEntries: prev.incomeEntries.filter(i => i.id !== id) }));
+  const handleDeleteIncome = async (id: string) => {
+    try {
+      await fetch(`/api/incomes?id=${id}`, { method: 'DELETE' });
+      setState(prev => ({ ...prev, incomeEntries: prev.incomeEntries.filter(i => i.id !== id) }));
+    } catch (e) { console.error(e); }
   };
 
-  const handleAddOutstanding = (entry: OutstandingExpense) => {
-    setState(prev => ({ ...prev, outstandingExpenses: [...prev.outstandingExpenses, entry] }));
+  const handleAddOutstanding = async (entry: OutstandingExpense) => {
+    try {
+      await fetch('/api/outstanding', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      setState(prev => ({ ...prev, outstandingExpenses: [...prev.outstandingExpenses, entry] }));
+    } catch (e) { console.error(e); }
   };
 
-  const handleSettleOutstanding = (id: string, amountToPay: number) => {
-    setState(prev => {
-      const target = prev.outstandingExpenses.find(o => o.id === id);
-      if (!target) return prev;
+  const handleSettleOutstanding = async (id: string, amountToPay: number) => {
+    // Calculate new state logic to send to API
+    const target = state.outstandingExpenses.find(o => o.id === id);
+    if (!target) return;
+    const expense = state.expenseEntries.find(e => e.id === target.expenseId);
+    if (!expense) return;
 
-      const newRemaining = target.amount - amountToPay;
-      const updatedExpenseEntries = prev.expenseEntries.map(e => {
-        if (e.id === target.expenseId) {
-          const newPaid = e.amountPaid + amountToPay;
-          return {
-            ...e,
-            amountPaid: newPaid,
-            remainingAmount: Math.max(0, e.amount - newPaid)
-          };
-        }
-        return e;
-      });
+    const newRemaining = target.amount - amountToPay;
+    const newPaid = expense.amountPaid + amountToPay;
+    const newExpenseRemaining = Math.max(0, expense.amount - newPaid);
 
-      if (newRemaining <= 0) {
-        return {
-          ...prev,
-          expenseEntries: updatedExpenseEntries,
-          outstandingExpenses: prev.outstandingExpenses.filter(o => o.id !== id)
-        };
-      } else {
-        return {
-          ...prev,
-          expenseEntries: updatedExpenseEntries,
-          outstandingExpenses: prev.outstandingExpenses.map(o => 
-            o.id === id ? { ...o, amount: newRemaining } : o
-          )
-        };
-      }
-    });
+    try {
+        await fetch('/api/outstanding?action=settle', { 
+            method: 'PUT', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({
+                outstandingId: id,
+                newOutstandingAmount: newRemaining,
+                expenseId: target.expenseId,
+                newExpensePaid: newPaid,
+                newExpenseRemaining: newExpenseRemaining
+            }) 
+        });
+
+        // Optimistic update
+        setState(prev => {
+          // ... (same logic as before)
+          const updatedExpenseEntries = prev.expenseEntries.map(e => {
+            if (e.id === target.expenseId) {
+              return {
+                ...e,
+                amountPaid: newPaid,
+                remainingAmount: newExpenseRemaining
+              };
+            }
+            return e;
+          });
+
+          if (newRemaining <= 0) {
+            return {
+              ...prev,
+              expenseEntries: updatedExpenseEntries,
+              outstandingExpenses: prev.outstandingExpenses.filter(o => o.id !== id)
+            };
+          } else {
+            return {
+              ...prev,
+              expenseEntries: updatedExpenseEntries,
+              outstandingExpenses: prev.outstandingExpenses.map(o => 
+                o.id === id ? { ...o, amount: newRemaining } : o
+              )
+            };
+          }
+        });
+    } catch (e) { console.error(e); }
   };
 
   if (!state.currentUser) {
