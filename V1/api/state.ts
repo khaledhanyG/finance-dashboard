@@ -1,6 +1,6 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from './db';
+import { Pool } from 'pg';
 
 // Helper to map DB rows to Types
 const mapEmployee = (row: any) => ({
@@ -36,8 +36,8 @@ const mapIncome = (row: any) => ({
   ordersCount: row.ordersCount,
   grossOrdersCount: row.grossOrdersCount,
   cogs: Number(row.cogs),
-  cogsItems: [], // Populated separately or via join
-  refunds: [],   // Populated separately
+  cogsItems: [],
+  refunds: [],
   totalRefundsAmount: Number(row.totalRefundsAmount),
   totalInspectorShareCancelled: Number(row.totalInspectorShareCancelled),
   description: row.description
@@ -54,12 +54,17 @@ const mapTask = (row: any) => ({
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).send('Method Not Allowed');
 
-  // DIAGNOSTIC START
+  // DIAGNOSTIC START: explicitly check env var before doing ANYTHING else
   if (!process.env.DATABASE_URL) {
     console.error("Critical: DATABASE_URL is undefined");
     return res.status(500).json({ error: "CONFIGURATION ERROR: DATABASE_URL is missing from Vercel Environment Variables. Please add it in Settings." });
   }
-  // DIAGNOSTIC END
+
+  // Create pool locally for this request to ensure no global crashes
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
 
   const client = await pool.connect().catch(e => {
     console.error("Connection Failed:", e);
@@ -108,5 +113,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+    await pool.end(); // Close local pool
   }
 }
