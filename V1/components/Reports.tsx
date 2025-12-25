@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { AppState } from '../types';
 
-type ReportType = 'employees' | 'expenses_by_emp' | 'expenses_by_dept' | 'income_by_service' | 'service_comparison';
+type ReportType = 'employees' | 'expenses_by_emp' | 'expenses_by_dept' | 'expenses_by_category' | 'income_by_service' | 'service_comparison';
 
 export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
   const [reportType, setReportType] = useState<ReportType>('employees');
@@ -54,7 +54,7 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
           'Nationality': e.nationality,
           'Status': e.isActive ? 'Active' : 'Inactive'
         }));
-      
+
       case 'expenses_by_emp':
         return state.expenseEntries
           .filter(e => (!customFilters.employeeId || e.employeeId === customFilters.employeeId) && isWithinDateRange(e.date))
@@ -77,6 +77,27 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
             'Amount': e.amount,
             'Description': e.description
           }));
+
+      case 'expenses_by_category': {
+        const grouped = state.expenseEntries
+          .filter(e => isWithinDateRange(e.date))
+          .reduce((acc, curr) => {
+            const catId = curr.categoryId;
+            if (!acc[catId]) {
+              acc[catId] = { catId, amount: 0, count: 0 };
+            }
+            acc[catId].amount += curr.amount;
+            acc[catId].count += 1;
+            return acc;
+          }, {} as any);
+
+        return Object.values(grouped).sort((a: any, b: any) => b.amount - a.amount).map((g: any) => ({
+          'Category': state.expenseCategories.find(c => c.id === g.catId)?.name || 'Unknown',
+          'Group': state.expenseGroups.find(gr => gr.id === state.expenseCategories.find(c => c.id === g.catId)?.groupId)?.name || '-',
+          'Transaction Count': g.count,
+          'Total Amount': g.amount
+        }));
+      }
 
       case 'income_by_service': {
         const grouped = state.incomeEntries
@@ -140,6 +161,7 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
       case 'employees': return 'Employee Directory';
       case 'expenses_by_emp': return 'Expenses by Staff Member';
       case 'expenses_by_dept': return 'Departmental Expenditure';
+      case 'expenses_by_category': return 'Expenses by Category';
       case 'income_by_service': return 'Income Breakdown by Service';
       case 'service_comparison': return 'Service Market Share Comparison';
       default: return 'Financial Report';
@@ -157,15 +179,15 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
                 { id: 'employees', label: 'Employees', icon: 'fa-users' },
                 { id: 'expenses_by_emp', label: 'Exp by Staff', icon: 'fa-id-card' },
                 { id: 'expenses_by_dept', label: 'Exp by Dept', icon: 'fa-sitemap' },
+                { id: 'expenses_by_category', label: 'Exp by Cat', icon: 'fa-tags' },
                 { id: 'income_by_service', label: 'Income by Svc', icon: 'fa-box-open' },
                 { id: 'service_comparison', label: 'Svc Comparison', icon: 'fa-chart-pie' },
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setReportType(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    reportType === tab.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'
-                  }`}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${reportType === tab.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'
+                    }`}
                 >
                   <i className={`fas ${tab.icon}`}></i>
                   {tab.label}
@@ -173,168 +195,168 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
               ))}
             </div>
           </div>
-          
+
           <div className="w-full md:w-auto flex items-end gap-2">
-             <button 
+            <button
               onClick={() => exportExcel(reportData, `report_${reportType}`)}
               className="bg-emerald-600 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-lg shadow-emerald-50 active:scale-95"
-             >
-               <i className="fas fa-file-excel"></i> Excel
-             </button>
-             <button 
+            >
+              <i className="fas fa-file-excel"></i> Excel
+            </button>
+            <button
               onClick={exportPDF}
               className="bg-rose-600 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-lg shadow-rose-50 active:scale-95"
-             >
-               <i className="fas fa-file-pdf"></i> PDF
-             </button>
+            >
+              <i className="fas fa-file-pdf"></i> PDF
+            </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-8 bg-slate-50 p-4 rounded-xl border border-slate-100">
-           <div className="md:col-span-2 grid grid-cols-2 gap-2">
-             <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Start Date</label>
-                <input 
-                  type="date" 
-                  value={customFilters.startDate} 
-                  onChange={e => setCustomFilters({...customFilters, startDate: e.target.value})}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
-                />
-             </div>
-             <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">End Date</label>
-                <input 
-                  type="date" 
-                  value={customFilters.endDate} 
-                  onChange={e => setCustomFilters({...customFilters, endDate: e.target.value})}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
-                />
-             </div>
-           </div>
+          <div className="md:col-span-2 grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Start Date</label>
+              <input
+                type="date"
+                value={customFilters.startDate}
+                onChange={e => setCustomFilters({ ...customFilters, startDate: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">End Date</label>
+              <input
+                type="date"
+                value={customFilters.endDate}
+                onChange={e => setCustomFilters({ ...customFilters, endDate: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+          </div>
 
-           {reportType === 'expenses_by_dept' && (
-             <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Filter Dept</label>
-                <select 
-                  value={customFilters.departmentId} 
-                  onChange={e => setCustomFilters({...customFilters, departmentId: e.target.value})}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
-                >
-                  <option value="">All Departments</option>
-                  {state.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-             </div>
-           )}
+          {reportType === 'expenses_by_dept' && (
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Filter Dept</label>
+              <select
+                value={customFilters.departmentId}
+                onChange={e => setCustomFilters({ ...customFilters, departmentId: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">All Departments</option>
+                {state.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          )}
 
-           {reportType === 'expenses_by_emp' && (
-             <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Filter Staff</label>
-                <select 
-                  value={customFilters.employeeId} 
-                  onChange={e => setCustomFilters({...customFilters, employeeId: e.target.value})}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
-                >
-                  <option value="">All Employees</option>
-                  {state.employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                </select>
-             </div>
-           )}
+          {reportType === 'expenses_by_emp' && (
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Filter Staff</label>
+              <select
+                value={customFilters.employeeId}
+                onChange={e => setCustomFilters({ ...customFilters, employeeId: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">All Employees</option>
+                {state.employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+              </select>
+            </div>
+          )}
 
-           {reportType === 'income_by_service' && (
-             <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Filter Service</label>
-                <select 
-                  value={customFilters.serviceId} 
-                  onChange={e => setCustomFilters({...customFilters, serviceId: e.target.value})}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
-                >
-                  <option value="">All Services</option>
-                  {state.incomeServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-             </div>
-           )}
+          {reportType === 'income_by_service' && (
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Filter Service</label>
+              <select
+                value={customFilters.serviceId}
+                onChange={e => setCustomFilters({ ...customFilters, serviceId: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">All Services</option>
+                {state.incomeServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
 
-           <div className="md:col-span-1 text-right flex items-end justify-end pb-2">
-              <span className="text-[10px] text-indigo-400 font-black uppercase tracking-widest">Entries Found: {reportData.length}</span>
-           </div>
+          <div className="md:col-span-1 text-right flex items-end justify-end pb-2">
+            <span className="text-[10px] text-indigo-400 font-black uppercase tracking-widest">Entries Found: {reportData.length}</span>
+          </div>
         </div>
       </div>
 
       {/* Actual Data Table - Visible in UI and Print */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden report-container p-6 md:p-10">
         <div className="mb-6 hidden print:block">
-           <h2 className="text-2xl font-black text-indigo-900 uppercase tracking-tighter">{reportTitle}</h2>
-           <p className="text-xs text-slate-500 font-medium">Generated on {new Date().toLocaleString()}</p>
-           {customFilters.startDate && customFilters.endDate && (
-             <p className="text-[10px] font-bold text-indigo-600 uppercase mt-2">Period: {customFilters.startDate} to {customFilters.endDate}</p>
-           )}
-           <hr className="my-4 border-slate-200" />
+          <h2 className="text-2xl font-black text-indigo-900 uppercase tracking-tighter">{reportTitle}</h2>
+          <p className="text-xs text-slate-500 font-medium">Generated on {new Date().toLocaleString()}</p>
+          {customFilters.startDate && customFilters.endDate && (
+            <p className="text-[10px] font-bold text-indigo-600 uppercase mt-2">Period: {customFilters.startDate} to {customFilters.endDate}</p>
+          )}
+          <hr className="my-4 border-slate-200" />
         </div>
 
         <div className="overflow-x-auto min-h-[400px]">
-           {reportData.length > 0 ? (
-             <table className="w-full text-left text-sm whitespace-nowrap">
-               <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">
-                 <tr>
-                   {Object.keys(reportData[0]).map(h => (
-                     <th key={h} className={`px-6 py-4 ${h.includes('Revenue') || h.includes('Amount') || h.includes('Profit') || h.includes('COGS') || h.includes('Orders') || h.includes('Count') || h.includes('Refunds') || h.includes('Credit') ? 'text-right' : ''}`}>
-                       {h}
-                     </th>
-                   ))}
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-50">
-                 {reportData.map((row, idx) => (
-                   <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
-                     {Object.keys(row).map((key, vIdx) => {
-                       const val = (row as any)[key];
-                       const isNumeric = typeof val === 'number';
-                       const isProfit = key.includes('Profit');
-                       const isRefund = key.includes('Refunds');
-                       const isCogs = key.includes('COGS');
-                       return (
-                         <td key={vIdx} className={`px-6 py-3.5 text-slate-600 font-medium ${isNumeric ? 'text-right font-mono' : ''}`}>
-                            {isNumeric ? (
-                              <span className={`
+          {reportData.length > 0 ? (
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">
+                <tr>
+                  {Object.keys(reportData[0]).map(h => (
+                    <th key={h} className={`px-6 py-4 ${h.includes('Revenue') || h.includes('Amount') || h.includes('Profit') || h.includes('COGS') || h.includes('Orders') || h.includes('Count') || h.includes('Refunds') || h.includes('Credit') ? 'text-right' : ''}`}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {reportData.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
+                    {Object.keys(row).map((key, vIdx) => {
+                      const val = (row as any)[key];
+                      const isNumeric = typeof val === 'number';
+                      const isProfit = key.includes('Profit');
+                      const isRefund = key.includes('Refunds');
+                      const isCogs = key.includes('COGS');
+                      return (
+                        <td key={vIdx} className={`px-6 py-3.5 text-slate-600 font-medium ${isNumeric ? 'text-right font-mono' : ''}`}>
+                          {isNumeric ? (
+                            <span className={`
                                 ${isProfit ? (val >= 0 ? 'text-emerald-600 font-black' : 'text-rose-600 font-black') : ''}
                                 ${isRefund ? 'text-rose-500' : ''}
                                 ${isCogs ? 'text-amber-600' : ''}
                               `}>
-                                {val.toLocaleString()}
-                              </span>
-                            ) : val}
-                         </td>
-                       );
-                     })}
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-           ) : (
-             <div className="py-24 text-center">
-               <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                 <i className="fas fa-folder-open text-slate-300 text-2xl"></i>
-               </div>
-               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No matching records</p>
-               <p className="text-[10px] text-slate-300 mt-2 uppercase">Adjust filters to broaden search</p>
-             </div>
-           )}
+                              {val.toLocaleString()}
+                            </span>
+                          ) : val}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-24 text-center">
+              <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i className="fas fa-folder-open text-slate-300 text-2xl"></i>
+              </div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No matching records</p>
+              <p className="text-[10px] text-slate-300 mt-2 uppercase">Adjust filters to broaden search</p>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="bg-white border border-slate-100 p-8 rounded-3xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 no-print">
-         <div className="flex items-center gap-6">
-            <div className="bg-indigo-900 text-white h-14 w-14 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-100">
-              <i className="fas fa-print text-xl"></i>
-            </div>
-            <div>
-              <h4 className="font-black text-slate-800 uppercase tracking-tight text-lg">Presentation Mode</h4>
-              <p className="text-xs text-slate-500 font-medium">Generate a clean, professional PDF document of the current filtered dataset.</p>
-            </div>
-         </div>
-         <button onClick={exportPDF} className="bg-slate-900 text-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-black transition-all shadow-lg active:scale-95">
-            Initialize PDF Print
-         </button>
+        <div className="flex items-center gap-6">
+          <div className="bg-indigo-900 text-white h-14 w-14 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-100">
+            <i className="fas fa-print text-xl"></i>
+          </div>
+          <div>
+            <h4 className="font-black text-slate-800 uppercase tracking-tight text-lg">Presentation Mode</h4>
+            <p className="text-xs text-slate-500 font-medium">Generate a clean, professional PDF document of the current filtered dataset.</p>
+          </div>
+        </div>
+        <button onClick={exportPDF} className="bg-slate-900 text-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-black transition-all shadow-lg active:scale-95">
+          Initialize PDF Print
+        </button>
       </div>
     </div>
   );
