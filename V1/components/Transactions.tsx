@@ -25,7 +25,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
   const [editingIncId, setEditingIncId] = useState<string | null>(null);
   const [divideAmongAll, setDivideAmongAll] = useState(false);
   const [expenseSearch, setExpenseSearch] = useState('');
-  const [incomeFilterDate, setIncomeFilterDate] = useState<string>('');
+  const [incomeStartDate, setIncomeStartDate] = useState<string>('');
+  const [incomeEndDate, setIncomeEndDate] = useState<string>('');
 
   const [empSearchQuery, setEmpSearchQuery] = useState('');
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
@@ -226,10 +227,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
   }, [state.expenseEntries, state.departments, state.expenseCategories, expenseSearch]);
 
   const filteredIncomes = useMemo(() => {
-    let list = [...state.incomeEntries].reverse();
-    if (incomeFilterDate) list = list.filter(i => i.date === incomeFilterDate);
+    let list = [...state.incomeEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (incomeStartDate) list = list.filter(i => i.date >= incomeStartDate);
+    if (incomeEndDate) list = list.filter(i => i.date <= incomeEndDate);
     return list;
-  }, [state.incomeEntries, incomeFilterDate]);
+  }, [state.incomeEntries, incomeStartDate, incomeEndDate]);
 
   const incomeSummary = useMemo(() => filteredIncomes.reduce((acc, curr) => {
     const netRev = curr.amount - (curr.totalRefundsAmount || 0);
@@ -376,7 +378,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
           <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
             <h3 className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">{mode === 'income' ? 'Income Registry' : mode === 'expense' ? 'Expense Journal' : 'Outstanding Balances'}</h3>
             {mode === 'income' ? (
-              <input type="date" value={incomeFilterDate} onChange={e => setIncomeFilterDate(e.target.value)} className="text-[10px] px-2 py-1 bg-white border rounded outline-none" />
+              <div className="flex gap-2">
+                <input type="date" value={incomeStartDate} onChange={e => setIncomeStartDate(e.target.value)} className="text-[10px] px-2 py-1 bg-white border rounded outline-none" placeholder="Start Date" />
+                <span className="text-slate-400 self-center">-</span>
+                <input type="date" value={incomeEndDate} onChange={e => setIncomeEndDate(e.target.value)} className="text-[10px] px-2 py-1 bg-white border rounded outline-none" placeholder="End Date" />
+              </div>
             ) : (
               <input type="text" placeholder="Search..." value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)} className="text-[10px] px-2 py-1 bg-white border rounded outline-none w-32" />
             )}
