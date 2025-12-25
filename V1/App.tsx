@@ -62,6 +62,10 @@ const App: React.FC = () => {
     }
   }, [state.currentUser]); // Reload when user logs in
 
+  // Persist state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('finpulse_state', JSON.stringify(state));
+  }, [state]);
 
   /* Sync Helper */
   const syncChanges = async (key: keyof AppState, oldList: any[], newList: any[]) => {
