@@ -1,9 +1,16 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from './db';
+import pg from 'pg';
+const { Pool } = pg;
+
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   const client = await pool.connect();
+
   try {
     if (req.method === 'POST') {
       const { id, expenseId, date, amount, departmentId, description } = req.body;
@@ -20,26 +27,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Settle logic in App.tsx:
       // 1. Updates OutstandingExpense (amount) OR deletes it if 0.
       // 2. Updates ExpenseEntry (amountPaid, remainingAmount).
-      
+
       // Let's rely on frontend sending the exact queries or handle it transactionally.
       // For simplicity matching the frontend arguments, let's accept an "Action" type.
-      
+
       const { action } = req.query;
-      
+
       if (action === 'settle') {
-          const { outstandingId, newOutstandingAmount, expenseId, newExpensePaid, newExpenseRemaining } = req.body;
-          
-          await client.query('BEGIN');
-          // Update Expense
-          await client.query('UPDATE "ExpenseEntry" SET "amountPaid" = $1, "remainingAmount" = $2 WHERE id = $3', [newExpensePaid, newExpenseRemaining, expenseId]);
-          
-          if (newOutstandingAmount <= 0) {
-              await client.query('DELETE FROM "OutstandingExpense" WHERE id = $1', [outstandingId]);
-          } else {
-              await client.query('UPDATE "OutstandingExpense" SET "amount" = $1 WHERE id = $2', [newOutstandingAmount, outstandingId]);
-          }
-          await client.query('COMMIT');
-          res.status(200).json({ success: true });
+        const { outstandingId, newOutstandingAmount, expenseId, newExpensePaid, newExpenseRemaining } = req.body;
+
+        await client.query('BEGIN');
+        // Update Expense
+        await client.query('UPDATE "ExpenseEntry" SET "amountPaid" = $1, "remainingAmount" = $2 WHERE id = $3', [newExpensePaid, newExpenseRemaining, expenseId]);
+
+        if (newOutstandingAmount <= 0) {
+          await client.query('DELETE FROM "OutstandingExpense" WHERE id = $1', [outstandingId]);
+        } else {
+          await client.query('UPDATE "OutstandingExpense" SET "amount" = $1 WHERE id = $2', [newOutstandingAmount, outstandingId]);
+        }
+        await client.query('COMMIT');
+        res.status(200).json({ success: true });
       }
 
     } else {
@@ -51,5 +58,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+    await pool.end();
   }
 }

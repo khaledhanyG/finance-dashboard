@@ -15,7 +15,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('finpulse_state');
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...INITIAL_STATE, ...parsed, currentUser: null }; // Force re-login on refresh
+      return { ...INITIAL_STATE, ...parsed }; // Restore full state including currentUser
     }
     return INITIAL_STATE;
   });
@@ -293,8 +293,8 @@ const App: React.FC = () => {
                 key={nav.id}
                 onClick={() => setActivePage(nav.id as any)}
                 className={`flex items-center gap-2.5 px-5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${activePage === nav.id
-                    ? 'bg-white text-indigo-900 shadow-lg'
-                    : 'text-indigo-100 hover:bg-white/5'
+                  ? 'bg-white text-indigo-900 shadow-lg'
+                  : 'text-indigo-100 hover:bg-white/5'
                   }`}
               >
                 <i className={`fas ${nav.icon} opacity-70`}></i>

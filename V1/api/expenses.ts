@@ -1,15 +1,22 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from './db';
+import pg from 'pg';
+const { Pool } = pg;
+
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   const client = await pool.connect();
+
 
   try {
     if (req.method === 'POST') {
-      const { 
-        id, date, journalNo, categoryId, departmentId, employeeId, 
-        amount, amountPaid, remainingAmount, description 
+      const {
+        id, date, journalNo, categoryId, departmentId, employeeId,
+        amount, amountPaid, remainingAmount, description
       } = req.body;
 
       await client.query(
@@ -24,11 +31,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(200).json({ success: true });
 
     } else if (req.method === 'PUT') {
-       const { 
-        id, date, journalNo, categoryId, departmentId, employeeId, 
-        amount, amountPaid, remainingAmount, description 
+      const {
+        id, date, journalNo, categoryId, departmentId, employeeId,
+        amount, amountPaid, remainingAmount, description
       } = req.body;
-      
+
       await client.query(
         `UPDATE "ExpenseEntry" SET 
          "date"=$2, "journalNo"=$3, "categoryId"=$4, "departmentId"=$5, "employeeId"=$6, 
@@ -53,5 +60,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+    await pool.end();
   }
 }

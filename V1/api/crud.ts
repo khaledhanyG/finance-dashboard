@@ -1,6 +1,8 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from './db';
+import pg from 'pg';
+const { Pool } = pg;
+
 
 const TABLE_MAP: Record<string, string> = {
   departments: 'Department',
@@ -11,8 +13,14 @@ const TABLE_MAP: Record<string, string> = {
   tasks: 'Task'
 };
 
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   const client = await pool.connect();
+
   const { entity } = req.query;
   const tableName = TABLE_MAP[entity as string];
 
@@ -24,9 +32,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const columns = Object.keys(data).map(k => `"${k}"`).join(',');
       const values = Object.values(data);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(',');
-      
-      const query = `INSERT INTO "${tableName}" (${columns}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${Object.keys(data).map((k, i) => `"${k}"=$${i+1}`).join(',')}`;
-      
+
+      const query = `INSERT INTO "${tableName}" (${columns}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${Object.keys(data).map((k, i) => `"${k}"=$${i + 1}`).join(',')}`;
+
       // Note: ON CONFLICT requires a constraint. All my tables have PRIMARY KEY (id), so this works as UPSERT.
       await client.query(query, values);
       res.status(200).json({ success: true });
@@ -43,5 +51,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+    await pool.end();
   }
 }

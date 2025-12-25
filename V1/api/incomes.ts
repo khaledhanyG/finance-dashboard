@@ -1,15 +1,22 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from './db';
+import pg from 'pg';
+const { Pool } = pg;
+
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   const client = await pool.connect();
+
 
   try {
     if (req.method === 'POST') {
-      const { 
+      const {
         id, date, serviceId, departmentId, type, amount, ordersCount, grossOrdersCount,
-        cogs, cogsItems, refunds, totalRefundsAmount, totalInspectorShareCancelled, description 
+        cogs, cogsItems, refunds, totalRefundsAmount, totalInspectorShareCancelled, description
       } = req.body;
 
       await client.query('BEGIN');
@@ -18,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // We'll perform an Upsert or just Delete then Insert for simplicity of nested items?
       // Or check if ID exists.
       const check = await client.query('SELECT 1 FROM "IncomeEntry" WHERE id = $1', [id]);
-      
+
       if (check.rowCount > 0) {
         // Update
         await client.query(`
@@ -27,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             "grossOrdersCount"=$8, "cogs"=$9, "totalRefundsAmount"=$10, "totalInspectorShareCancelled"=$11, "description"=$12
             WHERE id = $1
         `, [id, date, serviceId, departmentId, type, amount, ordersCount, grossOrdersCount, cogs, totalRefundsAmount, totalInspectorShareCancelled, description]);
-        
+
         // Clear sub-items and re-insert
         await client.query('DELETE FROM "IncomeCogsItem" WHERE "incomeEntryId" = $1', [id]);
         await client.query('DELETE FROM "IncomeRefundItem" WHERE "incomeEntryId" = $1', [id]);
@@ -42,21 +49,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (cogsItems && cogsItems.length > 0) {
-          for (const item of cogsItems) {
-              await client.query(
-                  'INSERT INTO "IncomeCogsItem" ("id", "incomeEntryId", "categoryId", "amount") VALUES ($1, $2, $3, $4)',
-                  [item.id, id, item.categoryId, item.amount]
-              );
-          }
+        for (const item of cogsItems) {
+          await client.query(
+            'INSERT INTO "IncomeCogsItem" ("id", "incomeEntryId", "categoryId", "amount") VALUES ($1, $2, $3, $4)',
+            [item.id, id, item.categoryId, item.amount]
+          );
+        }
       }
 
       if (refunds && refunds.length > 0) {
-          for (const item of refunds) {
-              await client.query(
-                  'INSERT INTO "IncomeRefundItem" ("id", "incomeEntryId", "ordersCount", "amountRefunded", "inspectorShareCancelled") VALUES ($1, $2, $3, $4, $5)',
-                  [item.id, id, item.ordersCount, item.amountRefunded, item.inspectorShareCancelled]
-              );
-          }
+        for (const item of refunds) {
+          await client.query(
+            'INSERT INTO "IncomeRefundItem" ("id", "incomeEntryId", "ordersCount", "amountRefunded", "inspectorShareCancelled") VALUES ($1, $2, $3, $4, $5)',
+            [item.id, id, item.ordersCount, item.amountRefunded, item.inspectorShareCancelled]
+          );
+        }
       }
 
       await client.query('COMMIT');
@@ -72,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(200).json({ success: true });
 
     } else {
-       res.status(405).send('Method Not Allowed');
+      res.status(405).send('Method Not Allowed');
     }
   } catch (e: any) {
     await client.query('ROLLBACK');
@@ -80,5 +87,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+    await pool.end();
   }
 }
