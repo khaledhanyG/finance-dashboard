@@ -1,6 +1,8 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Pool } from 'pg';
+import pg from 'pg';
+
+const { Pool } = pg;
 
 // Helper to map DB rows to Types
 const mapEmployee = (row: any) => ({
