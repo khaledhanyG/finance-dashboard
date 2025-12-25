@@ -54,10 +54,21 @@ const mapTask = (row: any) => ({
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).send('Method Not Allowed');
 
-  const client = await pool.connect();
+  // DIAGNOSTIC START
+  if (!process.env.DATABASE_URL) {
+    console.error("Critical: DATABASE_URL is undefined");
+    return res.status(500).json({ error: "CONFIGURATION ERROR: DATABASE_URL is missing from Vercel Environment Variables. Please add it in Settings." });
+  }
+  // DIAGNOSTIC END
+
+  const client = await pool.connect().catch(e => {
+    console.error("Connection Failed:", e);
+    throw new Error(`DB Connection Failed: ${e.message} (Host: ${process.env.DATABASE_URL?.split('@')[1]?.split(':')[0] || 'unknown'})`);
+  });
+
   try {
     const [
-      depRes, empRes, grpRes, catRes, svcRes, 
+      depRes, empRes, grpRes, catRes, svcRes,
       expRes, outRes, incRes, cogsRes, refRes, taskRes
     ] = await Promise.all([
       client.query('SELECT * FROM "Department"'),
@@ -74,9 +85,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ]);
 
     const incomeEntries = incRes.rows.map(mapIncome).map(inc => ({
-        ...inc,
-        cogsItems: cogsRes.rows.filter((c: any) => c.incomeEntryId === inc.id).map((c: any) => ({ ...c, amount: Number(c.amount) })),
-        refunds: refRes.rows.filter((r: any) => r.incomeEntryId === inc.id).map((r: any) => ({ ...r, amountRefunded: Number(r.amountRefunded), inspectorShareCancelled: Number(r.inspectorShareCancelled) }))
+      ...inc,
+      cogsItems: cogsRes.rows.filter((c: any) => c.incomeEntryId === inc.id).map((c: any) => ({ ...c, amount: Number(c.amount) })),
+      refunds: refRes.rows.filter((r: any) => r.incomeEntryId === inc.id).map((r: any) => ({ ...r, amountRefunded: Number(r.amountRefunded), inspectorShareCancelled: Number(r.inspectorShareCancelled) }))
     }));
 
     const state = {
