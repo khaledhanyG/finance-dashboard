@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { AppState } from '../types';
 
-type ReportType = 'employees' | 'expenses_by_emp' | 'expenses_by_dept' | 'expenses_by_category' | 'income_by_service' | 'service_comparison';
+type ReportType = 'employees' | 'expenses_by_emp' | 'expenses_by_dept' | 'expenses_by_category' | 'income_by_service' | 'service_comparison' | 'cogs_breakdown';
 
 export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
   const [reportType, setReportType] = useState<ReportType>('employees');
@@ -99,6 +99,27 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
         }));
       }
 
+      case 'cogs_breakdown': {
+        const cogsGroups = state.expenseGroups.filter(g => g.isCOGS).map(g => g.id);
+        const grouped = state.incomeEntries
+          .filter(i => isWithinDateRange(i.date))
+          .reduce((acc, curr) => {
+            curr.cogsItems?.forEach(item => {
+              if (!acc[item.categoryId]) acc[item.categoryId] = { catId: item.categoryId, amount: 0, count: 0 };
+              acc[item.categoryId].amount += Number(item.amount);
+              acc[item.categoryId].count += 1;
+            });
+            return acc;
+          }, {} as any);
+
+        return Object.values(grouped).sort((a: any, b: any) => b.amount - a.amount).map((g: any) => ({
+          'COGS Category': state.expenseCategories.find(c => c.id === g.catId)?.name || 'Unknown',
+          'Parent Group': state.expenseGroups.find(gr => gr.id === state.expenseCategories.find(c => c.id === g.catId)?.groupId)?.name || '-',
+          'Times Applied': g.count,
+          'Total Cost (deducted)': g.amount
+        }));
+      }
+
       case 'income_by_service': {
         const grouped = state.incomeEntries
           .filter(i => (!customFilters.serviceId || i.serviceId === customFilters.serviceId) && isWithinDateRange(i.date))
@@ -162,6 +183,7 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
       case 'expenses_by_emp': return 'Expenses by Staff Member';
       case 'expenses_by_dept': return 'Departmental Expenditure';
       case 'expenses_by_category': return 'Expenses by Category';
+      case 'cogs_breakdown': return 'COGS Breakdown (Deductions from Income)';
       case 'income_by_service': return 'Income Breakdown by Service';
       case 'service_comparison': return 'Service Market Share Comparison';
       default: return 'Financial Report';
@@ -180,6 +202,7 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
                 { id: 'expenses_by_emp', label: 'Exp by Staff', icon: 'fa-id-card' },
                 { id: 'expenses_by_dept', label: 'Exp by Dept', icon: 'fa-sitemap' },
                 { id: 'expenses_by_category', label: 'Exp by Cat', icon: 'fa-tags' },
+                { id: 'cogs_breakdown', label: 'COGS Report', icon: 'fa-list-ol' },
                 { id: 'income_by_service', label: 'Income by Svc', icon: 'fa-box-open' },
                 { id: 'service_comparison', label: 'Svc Comparison', icon: 'fa-chart-pie' },
               ].map(tab => (

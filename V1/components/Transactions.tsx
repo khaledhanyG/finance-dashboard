@@ -15,9 +15,9 @@ interface TransactionsProps {
   onSettleOutstanding: (id: string, amount: number) => void;
 }
 
-export const Transactions: React.FC<TransactionsProps> = ({ 
-  state, onAddExpense, onAddExpenses, onUpdateExpense, onAddIncome, onUpdateIncome, 
-  onDeleteExpense, onDeleteIncome, onAddOutstanding, onSettleOutstanding 
+export const Transactions: React.FC<TransactionsProps> = ({
+  state, onAddExpense, onAddExpenses, onUpdateExpense, onAddIncome, onUpdateIncome,
+  onDeleteExpense, onDeleteIncome, onAddOutstanding, onSettleOutstanding
 }) => {
   const [mode, setMode] = useState<'expense' | 'income' | 'outstanding'>('expense');
   const [incomeType, setIncomeType] = useState<'revenue' | 'refund'>('revenue');
@@ -36,7 +36,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
     date: new Date().toISOString().split('T')[0],
     amount: ''
   });
-  
+
   const [expForm, setExpForm] = useState({
     date: new Date().toISOString().split('T')[0],
     journalNo: '',
@@ -64,6 +64,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
   const cogsGroups = useMemo(() => {
     return state.expenseGroups.filter(g => g.isCOGS);
   }, [state.expenseGroups]);
+
+  const cogsCategories = useMemo(() => {
+    const groupIds = cogsGroups.map(g => g.id);
+    return state.expenseCategories.filter(c => groupIds.includes(c.groupId));
+  }, [state.expenseCategories, cogsGroups]);
 
   const totalCogs = useMemo(() => incCogsItems.reduce((sum, item) => sum + Number(item.amount || 0), 0), [incCogsItems]);
   const totalRefundsAmount = useMemo(() => incRefundItems.reduce((sum, item) => sum + Number(item.amountRefunded || 0), 0), [incRefundItems]);
@@ -134,7 +139,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
       const newEntries: ExpenseEntry[] = activeEmployees.map((emp, idx) => ({
         id: `e-${Date.now()}-${idx}`,
         date: expForm.date,
-        journalNo: expForm.journalNo || `J${Math.floor(Math.random()*1000)}`,
+        journalNo: expForm.journalNo || `J${Math.floor(Math.random() * 1000)}`,
         categoryId: expForm.categoryId,
         departmentId: emp.departmentId,
         employeeId: emp.id,
@@ -150,7 +155,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
       onAddExpense({
         id: entryId,
         date: expForm.date,
-        journalNo: expForm.journalNo || `J${Math.floor(Math.random()*1000)}`,
+        journalNo: expForm.journalNo || `J${Math.floor(Math.random() * 1000)}`,
         categoryId: expForm.categoryId,
         departmentId: expForm.departmentId,
         employeeId: expForm.employeeId || null,
@@ -169,7 +174,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
   const handleSubmitIncome = (e: React.FormEvent) => {
     e.preventDefault();
     if (!incForm.serviceId) return;
-    
+
     let incomeData: IncomeEntry;
     if (incomeType === 'revenue') {
       const gross = Number(incForm.ordersCount || 0);
@@ -212,7 +217,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
   const filteredExpenses = useMemo(() => {
     const s = expenseSearch.toLowerCase();
-    return state.expenseEntries.slice().reverse().filter(e => 
+    return state.expenseEntries.slice().reverse().filter(e =>
       e.journalNo.toLowerCase().includes(s) ||
       state.departments.find(d => d.id === e.departmentId)?.name.toLowerCase().includes(s) ||
       state.expenseCategories.find(c => c.id === e.categoryId)?.name.toLowerCase().includes(s) ||
@@ -229,13 +234,22 @@ export const Transactions: React.FC<TransactionsProps> = ({
   const incomeSummary = useMemo(() => filteredIncomes.reduce((acc, curr) => {
     const netRev = curr.amount - (curr.totalRefundsAmount || 0);
     const netCogs = curr.cogs - (curr.totalInspectorShareCancelled || 0);
+
+    // Accumulate each COGS category
+    curr.cogsItems?.forEach(item => {
+      if (!acc.cogsBreakdown[item.categoryId]) acc.cogsBreakdown[item.categoryId] = 0;
+      acc.cogsBreakdown[item.categoryId] += Number(item.amount);
+    });
+
     return {
       orders: acc.orders + Number(curr.ordersCount || 0),
       revenue: acc.revenue + netRev,
       cogs: acc.cogs + netCogs,
-      net: acc.net + (netRev - netCogs)
+      inspectorCr: acc.inspectorCr + (Number(curr.totalInspectorShareCancelled) || 0),
+      net: acc.net + (netRev - netCogs),
+      cogsBreakdown: acc.cogsBreakdown
     };
-  }, { orders: 0, revenue: 0, cogs: 0, net: 0 }), [filteredIncomes]);
+  }, { orders: 0, revenue: 0, cogs: 0, inspectorCr: 0, net: 0, cogsBreakdown: {} as Record<string, number> }), [filteredIncomes]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn pb-12">
@@ -251,14 +265,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
           <div className="p-6">
             {mode === 'expense' ? (
               <form onSubmit={handleSubmitExpense} className="space-y-4">
-                <input type="date" value={expForm.date} onChange={e => setExpForm({...expForm, date: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-xs" required />
+                <input type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-xs" required />
                 <div className="grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="Journal #" value={expForm.journalNo} onChange={e => setExpForm({...expForm, journalNo: e.target.value})} className="border rounded-lg px-3 py-2 text-xs" />
-                  <input type="number" placeholder="Cost (SAR)" value={expForm.amount} onChange={e => setExpForm({...expForm, amount: e.target.value})} className="border rounded-lg px-3 py-2 text-xs" required />
+                  <input type="text" placeholder="Journal #" value={expForm.journalNo} onChange={e => setExpForm({ ...expForm, journalNo: e.target.value })} className="border rounded-lg px-3 py-2 text-xs" />
+                  <input type="number" placeholder="Cost (SAR)" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} className="border rounded-lg px-3 py-2 text-xs" required />
                 </div>
-                <input type="number" placeholder="Paid Now (SAR)" value={expForm.amountPaid} onChange={e => setExpForm({...expForm, amountPaid: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-xs" />
+                <input type="number" placeholder="Paid Now (SAR)" value={expForm.amountPaid} onChange={e => setExpForm({ ...expForm, amountPaid: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-xs" />
                 <label className="flex items-center gap-2 p-2 bg-slate-50 rounded border text-[10px] font-bold uppercase cursor-pointer">
-                  <input type="checkbox" checked={divideAmongAll} onChange={e => setDivideAmongAll(e.target.checked)} className="rounded text-indigo-600"/> Divide among active staff
+                  <input type="checkbox" checked={divideAmongAll} onChange={e => setDivideAmongAll(e.target.checked)} className="rounded text-indigo-600" /> Divide among active staff
                 </label>
                 {!divideAmongAll && (
                   <div className="relative" ref={empDropdownRef}>
@@ -272,7 +286,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     )}
                   </div>
                 )}
-                <select value={expForm.categoryId} onChange={e => setExpForm({...expForm, categoryId: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-xs" required>
+                <select value={expForm.categoryId} onChange={e => setExpForm({ ...expForm, categoryId: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-xs" required>
                   <option value="">Category</option>
                   {state.expenseGroups.map(g => (
                     <optgroup key={g.id} label={g.name}>
@@ -281,12 +295,12 @@ export const Transactions: React.FC<TransactionsProps> = ({
                   ))}
                 </select>
                 {!divideAmongAll && (
-                  <select value={expForm.departmentId} onChange={e => setExpForm({...expForm, departmentId: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-xs" required>
+                  <select value={expForm.departmentId} onChange={e => setExpForm({ ...expForm, departmentId: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-xs" required>
                     <option value="">Department</option>
                     {state.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 )}
-                <textarea placeholder="Description" value={expForm.description} onChange={e => setExpForm({...expForm, description: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-xs" rows={2}></textarea>
+                <textarea placeholder="Description" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-xs" rows={2}></textarea>
                 <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100">Post Expense</button>
               </form>
             ) : mode === 'income' ? (
@@ -299,11 +313,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input type="date" value={incForm.date} onChange={e => setIncForm({...incForm, date: e.target.value})} className="border rounded-lg px-3 py-2 text-xs" required />
-                  <input type="number" placeholder={incomeType === 'revenue' ? 'Orders (Gross)' : 'Orders Refunded'} value={incForm.ordersCount} onChange={e => setIncForm({...incForm, ordersCount: e.target.value})} className="border rounded-lg px-3 py-2 text-xs" required />
+                  <input type="date" value={incForm.date} onChange={e => setIncForm({ ...incForm, date: e.target.value })} className="border rounded-lg px-3 py-2 text-xs" required />
+                  <input type="number" placeholder={incomeType === 'revenue' ? 'Orders (Gross)' : 'Orders Refunded'} value={incForm.ordersCount} onChange={e => setIncForm({ ...incForm, ordersCount: e.target.value })} className="border rounded-lg px-3 py-2 text-xs" required />
                 </div>
                 <div className="grid grid-cols-1 gap-2">
-                  <select value={incForm.serviceId} onChange={e => setIncForm({...incForm, serviceId: e.target.value})} className="border rounded-lg px-3 py-2 text-xs" required>
+                  <select value={incForm.serviceId} onChange={e => setIncForm({ ...incForm, serviceId: e.target.value })} className="border rounded-lg px-3 py-2 text-xs" required>
                     <option value="">Service</option>
                     {state.incomeServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -345,7 +359,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     </div>
                   </div>
                 )}
-                <textarea placeholder="Description" value={incForm.description} onChange={e => setIncForm({...incForm, description: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-xs" rows={2}></textarea>
+                <textarea placeholder="Description" value={incForm.description} onChange={e => setIncForm({ ...incForm, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-xs" rows={2}></textarea>
                 <button type="submit" className={`w-full text-white font-bold py-3 rounded-xl text-[10px] uppercase tracking-widest shadow-lg ${incomeType === 'revenue' ? 'bg-emerald-600 shadow-emerald-50' : 'bg-amber-600 shadow-amber-50'}`}>
                   {editingIncId ? 'Update Entry' : 'Post Entry'}
                 </button>
@@ -371,7 +385,16 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-100/50 border-b text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 {mode === 'income' ? (
-                  <tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Orders</th><th className="px-4 py-3">Service</th><th className="px-4 py-3 text-right">Rev. (Net)</th><th className="px-4 py-3 text-right">COGS / Cr.</th><th className="px-4 py-3 text-right">Net</th><th className="px-4 py-3"></th></tr>
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Orders</th>
+                    <th className="px-4 py-3">Service</th>
+                    <th className="px-4 py-3 text-right">Rev. (Net)</th>
+                    {cogsCategories.map(c => <th key={c.id} className="px-4 py-3 text-right text-rose-300 text-[9px]">{c.name}</th>)}
+                    <th className="px-4 py-3 text-right text-emerald-300">Insp. Cr.</th>
+                    <th className="px-4 py-3 text-right">Net</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
                 ) : mode === 'expense' ? (
                   <tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Journal</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Dept</th><th className="px-4 py-3 text-right">Total</th><th className="px-4 py-3"></th></tr>
                 ) : (
@@ -394,9 +417,25 @@ export const Transactions: React.FC<TransactionsProps> = ({
                       <td className="px-4 py-3 text-right">
                         <div className={`text-xs font-black ${isRef ? 'text-rose-600' : 'text-emerald-700'}`}>{isRef ? `-${i.totalRefundsAmount.toLocaleString()}` : netRev.toLocaleString()}</div>
                       </td>
+
+                      {/* Dynamic COGS Columns */}
+                      {cogsCategories.map(cat => {
+                        const item = i.cogsItems?.find(ci => ci.categoryId === cat.id);
+                        const amt = item ? Number(item.amount) : 0;
+                        return (
+                          <td key={cat.id} className="px-4 py-3 text-right">
+                            {amt > 0 ? <span className="text-xs font-bold text-rose-500">-{amt.toLocaleString()}</span> : <span className="text-[10px] text-slate-200">-</span>}
+                          </td>
+                        );
+                      })}
+
+                      {/* Inspector Credit / Share Cancelled */}
                       <td className="px-4 py-3 text-right">
-                        <div className={`text-xs font-black ${isRef ? 'text-emerald-600' : 'text-rose-500'}`}>{isRef ? `+${i.totalInspectorShareCancelled.toLocaleString()}` : `-${netCogs.toLocaleString()}`}</div>
+                        <div className={`text-xs font-bold ${i.totalInspectorShareCancelled > 0 ? 'text-emerald-500' : 'text-slate-200'}`}>
+                          {i.totalInspectorShareCancelled > 0 ? `+${i.totalInspectorShareCancelled.toLocaleString()}` : '-'}
+                        </div>
                       </td>
+
                       <td className="px-4 py-3 text-right font-black">{(netRev - netCogs).toLocaleString()}</td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <button onClick={() => startEditIncome(i)} className="text-slate-300 hover:text-indigo-600 mr-3"><i className="fas fa-edit"></i></button>
@@ -406,14 +445,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
                   );
                 })}
                 {mode === 'expense' && filteredExpenses.map(e => (
-                   <tr key={e.id} className="border-b hover:bg-slate-50 transition-colors">
-                     <td className="px-4 py-3 text-xs text-slate-500">{e.date}</td>
-                     <td className="px-4 py-3 font-mono text-[10px] font-bold">{e.journalNo}</td>
-                     <td className="px-4 py-3 text-xs font-bold">{state.expenseCategories.find(c => c.id === e.categoryId)?.name}</td>
-                     <td className="px-4 py-3 text-xs font-bold text-indigo-400 uppercase">{state.departments.find(d => d.id === e.departmentId)?.name}</td>
-                     <td className="px-4 py-3 text-right font-black">{e.amount.toLocaleString()}</td>
-                     <td className="px-4 py-3 text-right"><button onClick={() => onDeleteExpense(e.id)} className="text-slate-300 hover:text-rose-600"><i className="fas fa-trash-can"></i></button></td>
-                   </tr>
+                  <tr key={e.id} className="border-b hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 text-xs text-slate-500">{e.date}</td>
+                    <td className="px-4 py-3 font-mono text-[10px] font-bold">{e.journalNo}</td>
+                    <td className="px-4 py-3 text-xs font-bold">{state.expenseCategories.find(c => c.id === e.categoryId)?.name}</td>
+                    <td className="px-4 py-3 text-xs font-bold text-indigo-400 uppercase">{state.departments.find(d => d.id === e.departmentId)?.name}</td>
+                    <td className="px-4 py-3 text-right font-black">{e.amount.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right"><button onClick={() => onDeleteExpense(e.id)} className="text-slate-300 hover:text-rose-600"><i className="fas fa-trash-can"></i></button></td>
+                  </tr>
                 ))}
                 {mode === 'outstanding' && state.outstandingExpenses.map(o => (
                   <tr key={o.id} className="border-b hover:bg-slate-50 transition-colors">
@@ -421,7 +460,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     <td className="px-4 py-3 text-xs font-bold">{o.description}</td>
                     <td className="px-4 py-3 text-[10px] font-black uppercase text-indigo-400">{state.departments.find(d => d.id === o.departmentId)?.name}</td>
                     <td className="px-4 py-3 text-right font-black text-rose-600">{o.amount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center"><button onClick={() => { setSettleItemId(o.id); setSettleForm({...settleForm, amount: o.amount.toString()}); }} className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest border border-emerald-100">PAY</button></td>
+                    <td className="px-4 py-3 text-center"><button onClick={() => { setSettleItemId(o.id); setSettleForm({ ...settleForm, amount: o.amount.toString() }); }} className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest border border-emerald-100">PAY</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -432,7 +471,10 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     <td className={`px-4 py-4 text-xs ${incomeSummary.orders < 0 ? 'text-rose-600' : 'text-indigo-600'}`}>{incomeSummary.orders}</td>
                     <td className="px-4 py-4"></td>
                     <td className="px-4 py-4 text-right text-xs text-emerald-700">{incomeSummary.revenue.toLocaleString()}</td>
-                    <td className="px-4 py-4 text-right text-xs text-rose-600">-{incomeSummary.cogs.toLocaleString()}</td>
+                    {cogsCategories.map(c => (
+                      <td key={c.id} className="px-4 py-4 text-right text-[10px] text-rose-400 font-bold">-{incomeSummary.cogsBreakdown[c.id]?.toLocaleString() || 0}</td>
+                    ))}
+                    <td className="px-4 py-4 text-right text-xs text-emerald-600">+{incomeSummary.inspectorCr.toLocaleString()}</td>
                     <td className="px-4 py-4 text-right text-sm underline decoration-indigo-200 decoration-2 underline-offset-4">{incomeSummary.net.toLocaleString()} SAR</td>
                     <td></td>
                   </tr>
@@ -442,14 +484,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
           </div>
         </div>
       </div>
-      
+
       {settleItemId && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <h3 className="text-lg font-bold text-slate-800 mb-4 uppercase tracking-tighter">Settle Balance</h3>
             <form onSubmit={(e) => { e.preventDefault(); onSettleOutstanding(settleItemId, Number(settleForm.amount)); setSettleItemId(null); }} className="space-y-4">
-              <input type="date" value={settleForm.date} onChange={e => setSettleForm({...settleForm, date: e.target.value})} className="w-full border rounded-lg px-4 py-2 text-sm" required />
-              <input type="number" placeholder="Amt Paid" value={settleForm.amount} onChange={e => setSettleForm({...settleForm, amount: e.target.value})} className="w-full border rounded-lg px-4 py-2 text-sm" required />
+              <input type="date" value={settleForm.date} onChange={e => setSettleForm({ ...settleForm, date: e.target.value })} className="w-full border rounded-lg px-4 py-2 text-sm" required />
+              <input type="number" placeholder="Amt Paid" value={settleForm.amount} onChange={e => setSettleForm({ ...settleForm, amount: e.target.value })} className="w-full border rounded-lg px-4 py-2 text-sm" required />
               <div className="flex gap-2">
                 <button type="button" onClick={() => setSettleItemId(null)} className="flex-1 py-2 text-xs font-bold text-slate-400">Cancel</button>
                 <button type="submit" className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase">Confirm Payment</button>
