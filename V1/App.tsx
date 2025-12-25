@@ -22,7 +22,7 @@ const App: React.FC = () => {
 
   const [activePage, setActivePage] = useState<'dashboard' | 'settings' | 'transactions' | 'reports' | 'tasks'>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
     itemName: string;
@@ -30,7 +30,7 @@ const App: React.FC = () => {
   }>({
     isOpen: false,
     itemName: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
   });
 
   useEffect(() => {
@@ -38,22 +38,27 @@ const App: React.FC = () => {
     const fetchData = async () => {
       try {
         const res = await fetch('/api/state');
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server responded with ${res.status}: ${text}`);
+        }
         if (res.ok) {
           const data = await res.json();
           // Merge with initial state structure to ensure no missing keys
-          setState(prev => ({ 
-             ...INITIAL_STATE, 
-             ...data, 
-             users: prev.users, // Keep users (mock auth) or fetch if we had a users table
-             currentUser: prev.currentUser 
+          setState(prev => ({
+            ...INITIAL_STATE,
+            ...data,
+            users: prev.users, // Keep users (mock auth) or fetch if we had a users table
+            currentUser: prev.currentUser
           }));
         }
       } catch (err) {
         console.error("Failed to fetch state:", err);
+        alert("CRITICAL ERROR: Failed to load data from server. Please check your network or Vercel logs. " + String(err));
       }
     };
     if (state.currentUser) {
-       fetchData();
+      fetchData();
     }
   }, [state.currentUser]); // Reload when user logs in
 
@@ -62,8 +67,8 @@ const App: React.FC = () => {
   const syncChanges = async (key: keyof AppState, oldList: any[], newList: any[]) => {
     // Diff to find Add/Update vs Delete
     const addedOrUpdated = newList.filter(n => {
-       const o = oldList.find(x => x.id === n.id);
-       return !o || JSON.stringify(o) !== JSON.stringify(n);
+      const o = oldList.find(x => x.id === n.id);
+      return !o || JSON.stringify(o) !== JSON.stringify(n);
     });
     const removed = oldList.filter(o => !newList.find(n => n.id === o.id));
 
@@ -73,24 +78,24 @@ const App: React.FC = () => {
     if (!SYNC_KEYS.includes(key)) return;
 
     for (const item of addedOrUpdated) {
-        await fetch(`/api/crud?entity=${key}`, { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify(item) 
-        }).catch(console.error);
+      await fetch(`/api/crud?entity=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      }).catch(console.error);
     }
     for (const item of removed) {
-        await fetch(`/api/crud?entity=${key}&id=${item.id}`, { method: 'DELETE' }).catch(console.error);
+      await fetch(`/api/crud?entity=${key}&id=${item.id}`, { method: 'DELETE' }).catch(console.error);
     }
   };
 
   const updateState = (newState: Partial<AppState>) => {
     // Intercept and Sync
     Object.keys(newState).forEach(key => {
-        const k = key as keyof AppState;
-        if (Array.isArray(newState[k]) && Array.isArray(state[k])) {
-            syncChanges(k, state[k] as any[], newState[k] as any[]);
-        }
+      const k = key as keyof AppState;
+      if (Array.isArray(newState[k]) && Array.isArray(state[k])) {
+        syncChanges(k, state[k] as any[], newState[k] as any[]);
+      }
     });
     setState(prev => ({ ...prev, ...newState }));
   };
@@ -119,7 +124,7 @@ const App: React.FC = () => {
 
   const handleAddExpense = async (entry: ExpenseEntry) => {
     try {
-      const res = await fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
       if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, entry] }));
     } catch (e: any) {
@@ -130,17 +135,17 @@ const App: React.FC = () => {
 
   const handleAddExpenses = async (entries: ExpenseEntry[]) => {
     try {
-        await Promise.all(entries.map(async e => {
-           const res = await fetch('/api/expenses', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(e) });
-           if (!res.ok) throw new Error(await res.text());
-        }));
-        setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, ...entries] }));
+      await Promise.all(entries.map(async e => {
+        const res = await fetch('/api/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e) });
+        if (!res.ok) throw new Error(await res.text());
+      }));
+      setState(prev => ({ ...prev, expenseEntries: [...prev.expenseEntries, ...entries] }));
     } catch (e: any) { console.error(e); alert("Failed to save expenses: " + e.message); }
   };
 
   const handleUpdateExpense = async (entry: ExpenseEntry) => {
     try {
-      const res = await fetch('/api/expenses', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/expenses', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
       if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, expenseEntries: prev.expenseEntries.map(e => e.id === entry.id ? entry : e) }));
     } catch (e: any) { console.error(e); alert("Failed to update expense: " + e.message); }
@@ -148,7 +153,7 @@ const App: React.FC = () => {
 
   const handleAddIncome = async (entry: IncomeEntry) => {
     try {
-      const res = await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/incomes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
       if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, incomeEntries: [...prev.incomeEntries, entry] }));
     } catch (e: any) { console.error(e); alert("Failed to save income: " + e.message); }
@@ -156,7 +161,7 @@ const App: React.FC = () => {
 
   const handleUpdateIncome = async (entry: IncomeEntry) => {
     try {
-      const res = await fetch('/api/incomes', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/incomes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
       if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, incomeEntries: prev.incomeEntries.map(i => i.id === entry.id ? entry : i) }));
     } catch (e: any) { console.error(e); alert("Failed to update income: " + e.message); }
@@ -166,8 +171,8 @@ const App: React.FC = () => {
     try {
       const res = await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(await res.text());
-      setState(prev => ({ 
-        ...prev, 
+      setState(prev => ({
+        ...prev,
         expenseEntries: prev.expenseEntries.filter(e => e.id !== id),
         outstandingExpenses: prev.outstandingExpenses.filter(o => o.expenseId !== id)
       }));
@@ -184,7 +189,7 @@ const App: React.FC = () => {
 
   const handleAddOutstanding = async (entry: OutstandingExpense) => {
     try {
-      const res = await fetch('/api/outstanding', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(entry) });
+      const res = await fetch('/api/outstanding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
       if (!res.ok) throw new Error(await res.text());
       setState(prev => ({ ...prev, outstandingExpenses: [...prev.outstandingExpenses, entry] }));
     } catch (e: any) { console.error(e); alert("Failed to save outstanding: " + e.message); }
@@ -202,48 +207,48 @@ const App: React.FC = () => {
     const newExpenseRemaining = Math.max(0, expense.amount - newPaid);
 
     try {
-        await fetch('/api/outstanding?action=settle', { 
-            method: 'PUT', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({
-                outstandingId: id,
-                newOutstandingAmount: newRemaining,
-                expenseId: target.expenseId,
-                newExpensePaid: newPaid,
-                newExpenseRemaining: newExpenseRemaining
-            }) 
-        });
+      await fetch('/api/outstanding?action=settle', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          outstandingId: id,
+          newOutstandingAmount: newRemaining,
+          expenseId: target.expenseId,
+          newExpensePaid: newPaid,
+          newExpenseRemaining: newExpenseRemaining
+        })
+      });
 
-        // Optimistic update
-        setState(prev => {
-          // ... (same logic as before)
-          const updatedExpenseEntries = prev.expenseEntries.map(e => {
-            if (e.id === target.expenseId) {
-              return {
-                ...e,
-                amountPaid: newPaid,
-                remainingAmount: newExpenseRemaining
-              };
-            }
-            return e;
-          });
-
-          if (newRemaining <= 0) {
+      // Optimistic update
+      setState(prev => {
+        // ... (same logic as before)
+        const updatedExpenseEntries = prev.expenseEntries.map(e => {
+          if (e.id === target.expenseId) {
             return {
-              ...prev,
-              expenseEntries: updatedExpenseEntries,
-              outstandingExpenses: prev.outstandingExpenses.filter(o => o.id !== id)
-            };
-          } else {
-            return {
-              ...prev,
-              expenseEntries: updatedExpenseEntries,
-              outstandingExpenses: prev.outstandingExpenses.map(o => 
-                o.id === id ? { ...o, amount: newRemaining } : o
-              )
+              ...e,
+              amountPaid: newPaid,
+              remainingAmount: newExpenseRemaining
             };
           }
+          return e;
         });
+
+        if (newRemaining <= 0) {
+          return {
+            ...prev,
+            expenseEntries: updatedExpenseEntries,
+            outstandingExpenses: prev.outstandingExpenses.filter(o => o.id !== id)
+          };
+        } else {
+          return {
+            ...prev,
+            expenseEntries: updatedExpenseEntries,
+            outstandingExpenses: prev.outstandingExpenses.map(o =>
+              o.id === id ? { ...o, amount: newRemaining } : o
+            )
+          };
+        }
+      });
     } catch (e) { console.error(e); }
   };
 
@@ -287,11 +292,10 @@ const App: React.FC = () => {
               <button
                 key={nav.id}
                 onClick={() => setActivePage(nav.id as any)}
-                className={`flex items-center gap-2.5 px-5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
-                  activePage === nav.id 
-                    ? 'bg-white text-indigo-900 shadow-lg' 
+                className={`flex items-center gap-2.5 px-5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${activePage === nav.id
+                    ? 'bg-white text-indigo-900 shadow-lg'
                     : 'text-indigo-100 hover:bg-white/5'
-                }`}
+                  }`}
               >
                 <i className={`fas ${nav.icon} opacity-70`}></i>
                 <span>{nav.label}</span>
@@ -304,7 +308,7 @@ const App: React.FC = () => {
               <p className="text-[10px] text-white font-black uppercase tracking-widest">{state.currentUser.name}</p>
               <p className="text-[9px] text-indigo-300 font-bold uppercase tracking-[0.2em]">{state.currentUser.role}</p>
             </div>
-            <button 
+            <button
               onClick={handleLogout}
               className="w-10 h-10 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-indigo-200 transition-all flex items-center justify-center border border-white/5"
             >
@@ -312,7 +316,7 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          <button 
+          <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="md:hidden p-2 text-indigo-100 hover:text-white"
           >
@@ -326,9 +330,8 @@ const App: React.FC = () => {
               <button
                 key={nav.id}
                 onClick={() => { setActivePage(nav.id as any); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm uppercase ${
-                  activePage === nav.id ? 'bg-indigo-600 text-white' : 'text-indigo-100'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm uppercase ${activePage === nav.id ? 'bg-indigo-600 text-white' : 'text-indigo-100'
+                  }`}
               >
                 <i className={`fas ${nav.icon} w-6`}></i>
                 {nav.label}
@@ -352,9 +355,9 @@ const App: React.FC = () => {
           {activePage === 'reports' && <Reports state={state} />}
           {activePage === 'tasks' && role !== 'viewer' && <Tasks state={state} onUpdate={updateState} onDelete={triggerDelete} />}
           {activePage === 'transactions' && role !== 'viewer' && (
-            <Transactions 
-              state={state} 
-              onAddExpense={handleAddExpense} 
+            <Transactions
+              state={state}
+              onAddExpense={handleAddExpense}
               onAddExpenses={handleAddExpenses}
               onUpdateExpense={handleUpdateExpense}
               onAddIncome={handleAddIncome}
