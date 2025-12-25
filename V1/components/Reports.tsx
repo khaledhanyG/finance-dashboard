@@ -102,17 +102,24 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
       case 'cogs_breakdown': {
         const cogsGroups = state.expenseGroups.filter(g => g.isCOGS).map(g => g.id);
         const grouped = state.incomeEntries
-          .filter(i => isWithinDateRange(i.date))
+          .filter(i => (!customFilters.serviceId || i.serviceId === customFilters.serviceId) && isWithinDateRange(i.date))
           .reduce((acc, curr) => {
             curr.cogsItems?.forEach(item => {
-              if (!acc[item.categoryId]) acc[item.categoryId] = { catId: item.categoryId, amount: 0, count: 0 };
-              acc[item.categoryId].amount += Number(item.amount);
-              acc[item.categoryId].count += 1;
+              const key = `${curr.serviceId}_${item.categoryId}`;
+              if (!acc[key]) acc[key] = { svcId: curr.serviceId, catId: item.categoryId, amount: 0, count: 0 };
+              acc[key].amount += Number(item.amount);
+              acc[key].count += 1;
             });
             return acc;
           }, {} as any);
 
-        return Object.values(grouped).sort((a: any, b: any) => b.amount - a.amount).map((g: any) => ({
+        return Object.values(grouped).sort((a: any, b: any) => {
+          // Sort by Service Name first, then by Amount
+          const sA = state.incomeServices.find(s => s.id === a.svcId)?.name || '';
+          const sB = state.incomeServices.find(s => s.id === b.svcId)?.name || '';
+          return sA.localeCompare(sB) || b.amount - a.amount;
+        }).map((g: any) => ({
+          'Service': state.incomeServices.find(s => s.id === g.svcId)?.name || 'Unknown',
           'COGS Category': state.expenseCategories.find(c => c.id === g.catId)?.name || 'Unknown',
           'Parent Group': state.expenseGroups.find(gr => gr.id === state.expenseCategories.find(c => c.id === g.catId)?.groupId)?.name || '-',
           'Times Applied': g.count,
@@ -285,7 +292,7 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
             </div>
           )}
 
-          {reportType === 'income_by_service' && (
+          {reportType === 'income_by_service' || reportType === 'cogs_breakdown' ? (
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Filter Service</label>
               <select
@@ -297,7 +304,7 @@ export const Reports: React.FC<{ state: AppState }> = ({ state }) => {
                 {state.incomeServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
-          )}
+          ) : null}
 
           <div className="md:col-span-1 text-right flex items-end justify-end pb-2">
             <span className="text-[10px] text-indigo-400 font-black uppercase tracking-widest">Entries Found: {reportData.length}</span>
