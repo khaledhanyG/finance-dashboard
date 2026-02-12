@@ -111,7 +111,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
         {activeTab === 'users' && isAdmin && (
           <UserManager
             users={state.users}
-            onAdd={(name, email, password, role, permissions) => addItem('users', { id: `user-${Date.now()}`, name, email, password, role, permissions })}
+            onAdd={(user) => addItem('users', user)}
             onUpdate={(user) => updateItem('users', user)}
             onRemove={(user) => onDelete(user.name, () => removeItem('users', user.id))}
           />
@@ -182,14 +182,14 @@ const ALL_PAGES = [
   { id: 'settings', label: 'Settings' },
 ];
 
-const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: string, r: UserRole, perms: string[]) => void, onUpdate: (u: User) => void, onRemove: (u: User) => void }> = ({ users, onAdd, onUpdate, onRemove }) => {
+const UserManager: React.FC<{ users: User[], onAdd: (u: User) => void, onUpdate: (u: User) => void, onRemove: (u: User) => void }> = ({ users, onAdd, onUpdate, onRemove }) => {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'viewer' as UserRole, permissions: ['dashboard', 'reports', 'settings'] });
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.name && form.email && form.password) {
       try {
-        const newUser = {
+        const newUser: User = {
           id: `user-${Date.now()}`,
           name: form.name,
           email: form.email,
@@ -210,7 +210,7 @@ const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: st
           return;
         }
 
-        onAdd(form.name, form.email, form.password, form.role, form.permissions);
+        onAdd(newUser);
         setForm({ name: '', email: '', password: '', role: 'viewer', permissions: ['dashboard', 'reports', 'settings'] });
       } catch (error) {
         console.error('User creation error:', error);
@@ -248,13 +248,10 @@ const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: st
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-rose-600 p-6 rounded-xl border-4 border-rose-900 animate-bounce">
+      <div className="flex justify-between items-center bg-slate-50 p-6 rounded-xl border border-slate-100">
         <div>
-          <h4 className="text-3xl font-black text-white">FORCE UPDATE V3: Access Control</h4>
-          <p className="text-sm text-rose-100 font-bold">If you don't see this red bouncing box, your browser is showing OLD code.</p>
-        </div>
-        <div className="bg-white text-rose-600 px-4 py-2 rounded-full font-black text-xl">
-          PERMISSIONS SYSTEM
+          <h4 className="text-xl font-bold text-slate-800">Access Control</h4>
+          <p className="text-xs text-slate-500 font-medium">Manage user accounts and specific module access rights</p>
         </div>
       </div>
       <form onSubmit={handleAdd} className="bg-slate-50 p-6 rounded-xl border border-slate-100 space-y-4">

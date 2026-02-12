@@ -276,7 +276,7 @@ const App: React.FC = () => {
     { id: 'tasks', icon: 'fa-list-check', label: 'Tasks', show: isAdmin || userPerms.includes('tasks') },
     { id: 'reports', icon: 'fa-file-contract', label: 'Reports', show: isAdmin || userPerms.includes('reports') },
     { id: 'import', icon: 'fa-file-import', label: 'Import', show: isAdmin || userPerms.includes('import') },
-    { id: 'settings', icon: 'fa-sliders', label: isAdmin ? 'PERMISSIONS MANAGER' : 'My Profile', show: isAdmin || userPerms.includes('settings') }
+    { id: 'settings', icon: 'fa-sliders', label: isAdmin ? 'Organization' : 'My Profile', show: isAdmin || userPerms.includes('settings') }
   ];
 
   const visibleNavLinks = navLinks.filter(l => l.show);
