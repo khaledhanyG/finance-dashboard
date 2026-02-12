@@ -88,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const incomeCogsItemsRes = await client.query('SELECT * FROM "IncomeCogsItem"');
     const incomeRefundItemsRes = await client.query('SELECT * FROM "IncomeRefundItem"');
     const tasksRes = await client.query('SELECT * FROM "Task"');
-    const usersRes = await client.query('SELECT id, email, name, role FROM "User"'); // Load users without passwords
+    const usersRes = await client.query('SELECT id, email, name, role, permissions FROM "User"'); // Load users without passwords
 
     const incomeEntries = incomeEntriesRes.rows.map(mapIncome).map(inc => ({
       ...inc,

@@ -267,15 +267,16 @@ const App: React.FC = () => {
   }
 
   const role = state.currentUser.role;
-  const isViewer = role === 'viewer';
+  const userPerms = state.currentUser.permissions || [];
+  const isAdmin = role === 'admin';
 
   const navLinks = [
-    { id: 'dashboard', icon: 'fa-gauge-high', label: 'Overview', show: true },
-    { id: 'transactions', icon: 'fa-file-invoice-dollar', label: 'Accounting', show: role !== 'viewer' },
-    { id: 'tasks', icon: 'fa-list-check', label: 'Tasks', show: role !== 'viewer' },
-    { id: 'reports', icon: 'fa-file-contract', label: 'Reports', show: true },
-    { id: 'import', icon: 'fa-file-import', label: 'Import', show: role === 'admin' },
-    { id: 'settings', icon: 'fa-sliders', label: role === 'admin' ? 'Organization' : 'My Profile', show: true }
+    { id: 'dashboard', icon: 'fa-gauge-high', label: 'Overview', show: isAdmin || userPerms.includes('dashboard') },
+    { id: 'transactions', icon: 'fa-file-invoice-dollar', label: 'Accounting', show: isAdmin || userPerms.includes('transactions') },
+    { id: 'tasks', icon: 'fa-list-check', label: 'Tasks', show: isAdmin || userPerms.includes('tasks') },
+    { id: 'reports', icon: 'fa-file-contract', label: 'Reports', show: isAdmin || userPerms.includes('reports') },
+    { id: 'import', icon: 'fa-file-import', label: 'Import', show: isAdmin || userPerms.includes('import') },
+    { id: 'settings', icon: 'fa-sliders', label: isAdmin ? 'PERMISSIONS MANAGER' : 'My Profile', show: isAdmin || userPerms.includes('settings') }
   ];
 
   const visibleNavLinks = navLinks.filter(l => l.show);
@@ -361,34 +362,55 @@ const App: React.FC = () => {
 
       <div className="flex-1 flex flex-col max-w-[1600px] mx-auto w-full">
         <main className="flex-1 p-4 md:p-8">
-          {activePage === 'dashboard' && <Dashboard state={state} />}
-          {activePage === 'settings' && <Settings state={state} onUpdate={updateState} onDelete={triggerDelete} />}
-          {activePage === 'reports' && <Reports state={state} />}
-          {activePage === 'tasks' && role !== 'viewer' && <Tasks state={state} onUpdate={updateState} onDelete={triggerDelete} />}
-          {activePage === 'transactions' && role !== 'viewer' && (
-            <Transactions
-              state={state}
-              onAddExpense={handleAddExpense}
-              onAddExpenses={handleAddExpenses}
-              onUpdateExpense={handleUpdateExpense}
-              onAddIncome={handleAddIncome}
-              onUpdateIncome={handleUpdateIncome}
-              onDeleteExpense={(id) => {
-                const item = state.expenseEntries.find(e => e.id === id);
-                triggerDelete(item?.description || 'Expense Entry', () => handleDeleteExpense(id));
-              }}
-              onDeleteIncome={(id) => {
-                const item = state.incomeEntries.find(i => i.id === id);
-                triggerDelete(item?.description || 'Income Entry', () => handleDeleteIncome(id));
-              }}
-              onAddOutstanding={handleAddOutstanding}
-              onSettleOutstanding={handleSettleOutstanding}
-            />
+          {activePage === 'dashboard' && (isAdmin || userPerms.includes('dashboard')) && <Dashboard state={state} />}
+          {activePage === 'settings' && (isAdmin || userPerms.includes('settings')) && <Settings state={state} onUpdate={updateState} onDelete={triggerDelete} />}
+          {activePage === 'reports' && (isAdmin || userPerms.includes('reports')) && <Reports state={state} />}
+          {activePage === 'tasks' && (isAdmin || userPerms.includes('tasks')) && (
+            role === 'viewer' ? (
+              <div className="py-20 text-center text-slate-400">View-only mode active. Assignments restricted.</div>
+            ) : (
+              <Tasks state={state} onUpdate={updateState} onDelete={triggerDelete} />
+            )
           )}
-          {activePage === 'tasks' && role === 'viewer' && (
-            <div className="py-20 text-center text-slate-400">View-only mode active. Assignments restricted.</div>
+          {activePage === 'transactions' && (isAdmin || userPerms.includes('transactions')) && (
+            role === 'viewer' ? (
+              <div className="py-20 text-center text-slate-400">View-only mode active. Transaction entry restricted.</div>
+            ) : (
+              <Transactions
+                state={state}
+                onAddExpense={handleAddExpense}
+                onAddExpenses={handleAddExpenses}
+                onUpdateExpense={handleUpdateExpense}
+                onAddIncome={handleAddIncome}
+                onUpdateIncome={handleUpdateIncome}
+                onDeleteExpense={(id) => {
+                  const item = state.expenseEntries.find(e => e.id === id);
+                  triggerDelete(item?.description || 'Expense Entry', () => handleDeleteExpense(id));
+                }}
+                onDeleteIncome={(id) => {
+                  const item = state.incomeEntries.find(i => i.id === id);
+                  triggerDelete(item?.description || 'Income Entry', () => handleDeleteIncome(id));
+                }}
+                onAddOutstanding={handleAddOutstanding}
+                onSettleOutstanding={handleSettleOutstanding}
+              />
+            )
           )}
-          {activePage === 'import' && role === 'admin' && <ImportData state={state} onImport={handleAddExpenses} />}
+          {activePage === 'import' && (isAdmin || userPerms.includes('import')) && <ImportData state={state} onImport={handleAddExpenses} />}
+
+          {!isAdmin && !userPerms.includes(activePage) && (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <i className="fas fa-lock text-4xl mb-4 text-slate-200"></i>
+              <p className="text-lg font-bold">Access Restricted</p>
+              <p className="text-sm">You do not have permission to view this module. Please contact your administrator.</p>
+              <button
+                onClick={() => setActivePage(userPerms[0] as any || 'dashboard')}
+                className="mt-6 px-6 py-2 bg-indigo-600 text-white rounded-full text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md"
+              >
+                Return to safe area
+              </button>
+            </div>
+          )}
         </main>
       </div>
 

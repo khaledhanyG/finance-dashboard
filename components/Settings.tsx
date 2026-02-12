@@ -111,7 +111,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
         {activeTab === 'users' && isAdmin && (
           <UserManager
             users={state.users}
-            onAdd={(name, email, password, role) => addItem('users', { id: `user-${Date.now()}`, name, email, password, role })}
+            onAdd={(name, email, password, role, permissions) => addItem('users', { id: `user-${Date.now()}`, name, email, password, role, permissions })}
             onUpdate={(user) => updateItem('users', user)}
             onRemove={(user) => onDelete(user.name, () => removeItem('users', user.id))}
           />
@@ -173,8 +173,17 @@ const ProfileManager: React.FC<{ user: User, onUpdate: (u: User) => void }> = ({
   );
 };
 
-const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: string, r: UserRole) => void, onUpdate: (u: User) => void, onRemove: (u: User) => void }> = ({ users, onAdd, onUpdate, onRemove }) => {
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'viewer' as UserRole });
+const ALL_PAGES = [
+  { id: 'dashboard', label: 'Overview' },
+  { id: 'transactions', label: 'Accounting' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'reports', label: 'Reports' },
+  { id: 'import', label: 'Import' },
+  { id: 'settings', label: 'Settings' },
+];
+
+const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: string, r: UserRole, perms: string[]) => void, onUpdate: (u: User) => void, onRemove: (u: User) => void }> = ({ users, onAdd, onUpdate, onRemove }) => {
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'viewer' as UserRole, permissions: ['dashboard', 'reports', 'settings'] });
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,7 +194,8 @@ const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: st
           name: form.name,
           email: form.email,
           password: form.password,
-          role: form.role
+          role: form.role,
+          permissions: form.permissions
         };
 
         const res = await fetch('/api/users', {
@@ -200,8 +210,8 @@ const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: st
           return;
         }
 
-        onAdd(form.name, form.email, form.password, form.role);
-        setForm({ name: '', email: '', password: '', role: 'viewer' });
+        onAdd(form.name, form.email, form.password, form.role, form.permissions);
+        setForm({ name: '', email: '', password: '', role: 'viewer', permissions: ['dashboard', 'reports', 'settings'] });
       } catch (error) {
         console.error('User creation error:', error);
         alert('Failed to create user. Please try again.');
@@ -209,18 +219,75 @@ const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: st
     }
   };
 
+  const togglePage = (pageId: string, currentPerms: string[]) => {
+    if (currentPerms.includes(pageId)) {
+      return currentPerms.filter(p => p !== pageId);
+    } else {
+      return [...currentPerms, pageId];
+    }
+  };
+
+  const handleUpdatePerms = async (user: User, pageId: string) => {
+    const newPerms = togglePage(pageId, user.permissions || []);
+    const updatedUser = { ...user, permissions: newPerms };
+
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: user.id, permissions: newPerms })
+      });
+
+      if (!res.ok) throw new Error('Failed to update permissions');
+      onUpdate(updatedUser);
+    } catch (error) {
+      console.error(error);
+      alert('Error updating permissions');
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h4 className="text-xl font-bold text-slate-800">Access Control</h4>
-      <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
-        <input placeholder="Full Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" required />
-        <input placeholder="Email" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" required />
-        <input placeholder="Password" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" required />
-        <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value as any })} className="border rounded-lg px-3 py-2 text-sm">
-          <option value="viewer">Viewer (Read Only)</option>
-          <option value="editor">Editor (Modify Entries)</option>
-        </select>
-        <button type="submit" className="md:col-span-4 bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest">Create New Account</button>
+      <div className="flex justify-between items-center bg-rose-600 p-6 rounded-xl border-4 border-rose-900 animate-bounce">
+        <div>
+          <h4 className="text-3xl font-black text-white">FORCE UPDATE V3: Access Control</h4>
+          <p className="text-sm text-rose-100 font-bold">If you don't see this red bouncing box, your browser is showing OLD code.</p>
+        </div>
+        <div className="bg-white text-rose-600 px-4 py-2 rounded-full font-black text-xl">
+          PERMISSIONS SYSTEM
+        </div>
+      </div>
+      <form onSubmit={handleAdd} className="bg-slate-50 p-6 rounded-xl border border-slate-100 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input placeholder="Full Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" required />
+          <input placeholder="Email" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" required />
+          <input placeholder="Password" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" required />
+          <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value as any })} className="border rounded-lg px-3 py-2 text-sm">
+            <option value="viewer">Viewer (Read Only)</option>
+            <option value="editor">Editor (Modify Entries)</option>
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Initial Page Access</p>
+          <div className="flex flex-wrap gap-4">
+            {ALL_PAGES.map(page => (
+              <label key={page.id} className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={form.permissions.includes(page.id)}
+                  onChange={() => setForm({ ...form, permissions: togglePage(page.id, form.permissions) })}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-slate-600 group-hover:text-indigo-600 transition-colors">{page.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <button type="submit" className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-colors shadow-sm">
+          Create New Account
+        </button>
       </form>
 
       <div className="overflow-x-auto border border-slate-100 rounded-xl">
@@ -229,6 +296,7 @@ const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: st
             <tr>
               <th className="px-4 py-3">User</th>
               <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Page Access</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -246,6 +314,27 @@ const UserManager: React.FC<{ users: User[], onAdd: (n: string, e: string, p: st
                     }`}>
                     {u.role}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  {u.role === 'admin' ? (
+                    <span className="text-[10px] text-slate-400 italic">Full Access (Root)</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {ALL_PAGES.map(page => (
+                        <button
+                          key={page.id}
+                          onClick={() => handleUpdatePerms(u, page.id)}
+                          className={`px-2 py-0.5 rounded text-[9px] font-bold transition-all border ${
+                            (u.permissions || []).includes(page.id)
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-50 text-slate-400 border-slate-100 grayscale opacity-50'
+                          }`}
+                        >
+                          {page.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {u.role !== 'admin' && (

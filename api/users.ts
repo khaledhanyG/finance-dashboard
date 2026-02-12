@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // Login authentication
                 if (email && password) {
                     const result = await client.query(
-                        'SELECT id, email, name, role FROM "User" WHERE email = $1 AND password = $2',
+                        'SELECT id, email, name, role, permissions FROM "User" WHERE email = $1 AND password = $2',
                         [email, password]
                     );
 
@@ -40,14 +40,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 // List all users
                 const result = await client.query(
-                    'SELECT id, email, name, role FROM "User" ORDER BY "createdAt" ASC'
+                    'SELECT id, email, name, role, permissions FROM "User" ORDER BY "createdAt" ASC'
                 );
                 return res.status(200).json(result.rows);
             }
 
             // POST - Create new user
             if (method === 'POST') {
-                const { id, email, password, name, role } = body;
+                const { id, email, password, name, role, permissions } = body;
 
                 if (!id || !email || !password || !name || !role) {
                     return res.status(400).json({ error: 'Missing required fields' });
@@ -59,8 +59,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
 
                 const result = await client.query(
-                    'INSERT INTO "User" (id, email, password, name, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role',
-                    [id, email, password, name, role]
+                    'INSERT INTO "User" (id, email, password, name, role, permissions) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, name, role, permissions',
+                    [id, email, password, name, role, permissions || []]
                 );
 
                 return res.status(201).json(result.rows[0]);
@@ -68,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             // PUT - Update user
             if (method === 'PUT') {
-                const { id, email, password, name } = body;
+                const { id, email, password, name, role, permissions } = body;
 
                 if (!id) return res.status(400).json({ error: 'User ID is required' });
 
@@ -79,12 +79,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (name) { updates.push(`name = $${paramCount++}`); values.push(name); }
                 if (password) { updates.push(`password = $${paramCount++}`); values.push(password); }
                 if (email) { updates.push(`email = $${paramCount++}`); values.push(email); }
+                if (role) { updates.push(`role = $${paramCount++}`); values.push(role); }
+                if (permissions) { updates.push(`permissions = $${paramCount++}`); values.push(permissions); }
 
                 if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
                 values.push(id);
                 const result = await client.query(
-                    `UPDATE "User" SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, name, role`,
+                    `UPDATE "User" SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, name, role, permissions`,
                     values
                 );
 
