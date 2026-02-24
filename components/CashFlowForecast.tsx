@@ -75,6 +75,98 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
     return map;
   }, [items]);
 
+  const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly');
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string>(months[0]?.key || '');
+
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState<string>('');
+
+  const [cellModal, setCellModal] = useState<{
+    open: boolean;
+    categoryId?: string;
+    monthKey?: string;
+    day?: number;
+  }>({ open: false });
+
+  const openCellModal = (categoryId: string, monthKey: string, day?: number) => {
+    setCellModal({ open: true, categoryId, monthKey, day });
+  };
+
+  const closeCellModal = () => setCellModal({ open: false });
+
+  const itemsForCell = (categoryId: string, monthKey: string, day?: number) => {
+    return items.filter(it => it.categoryId === categoryId && (() => {
+      const d = new Date(it.date);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      if (key !== monthKey) return false;
+      if (day) return d.getDate() === day;
+      return true;
+    })());
+  };
+
+  const saveCategoryName = (catId: string) => {
+    const updated = (state.expenseCategories || []).map(c => c.id === catId ? { ...c, name: editingCategoryName } : c);
+    onUpdate({ expenseCategories: updated });
+    setEditingCategoryId(null);
+  };
+
+  const deleteCategory = (catId: string) => {
+    if (!confirm('Delete category and its forecast items?')) return;
+    const updatedCats = (state.expenseCategories || []).filter(c => c.id !== catId);
+    const updatedItems = (items || []).filter(i => i.categoryId !== catId);
+    onUpdate({ expenseCategories: updatedCats, cashFlowForecast: updatedItems });
+  };
+
+  const updateForecastItem = (updatedItem: CashFlowItem) => {
+    const newItems = items.map(i => i.id === updatedItem.id ? updatedItem : i);
+    onUpdate({ cashFlowForecast: newItems });
+  };
+
+  const removeForecastItem = (id: string) => {
+    const newItems = items.filter(i => i.id !== id);
+    onUpdate({ cashFlowForecast: newItems });
+  };
+
+  // Modal content renderer
+  const CellModalContent: React.FC = () => {
+    if (!cellModal.open || !cellModal.categoryId || !cellModal.monthKey) return null;
+    const list = itemsForCell(cellModal.categoryId, cellModal.monthKey, cellModal.day);
+    return (
+      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-6 w-[900px] max-w-full">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-bold">Items for {state.expenseCategories.find(c=>c.id===cellModal.categoryId)?.name} {cellModal.day ? `(day ${cellModal.day})` : `(${cellModal.monthKey})`}</h4>
+            <button onClick={closeCellModal} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times"></i></button>
+          </div>
+          <div className="space-y-3">
+            {list.length === 0 && <div className="text-slate-400 italic">No items</div>}
+            {list.map(it => (
+              <div key={it.id} className="p-3 border rounded flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">{it.description || '(no desc)'}</div>
+                  <div className="text-xs text-slate-500">{it.date} • {banks.find(b=>b.id===it.bankId)?.name || 'Unknown'} • {it.type} • {it.amount.toLocaleString()}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => {
+                    const edit = { ...it };
+                    const newAmount = prompt('Amount', String(edit.amount));
+                    if (newAmount === null) return;
+                    edit.amount = Number(newAmount);
+                    const newDesc = prompt('Description', edit.description || '');
+                    if (newDesc === null) return;
+                    edit.description = newDesc;
+                    updateForecastItem(edit);
+                  }} className="text-indigo-600">Edit</button>
+                  <button onClick={() => { if (confirm('Delete item?')) removeForecastItem(it.id); }} className="text-rose-500">Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
       <h4 className="text-xl font-bold text-slate-800 mb-4">Cash Flow Forecast</h4>
@@ -145,30 +237,89 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
             </div>
           </form>
 
-          <div className="overflow-x-auto border border-slate-100 rounded-lg">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
-                <tr>
-                  <th className="px-4 py-3">Category / Expense</th>
-                  {months.map(m => (
-                    <th key={m.key} className="px-3 py-2 text-center">{m.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map(cat => (
-                  <tr key={cat.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-medium">{cat.name}</td>
-                    {months.map(m => {
-                      const v = (gridTotals[cat.id] && gridTotals[cat.id][m.key]) || 0;
-                      return <td key={m.key} className="px-3 py-2 text-right">{v ? v.toLocaleString() : '-'}</td>;
-                    })}
-                  </tr>
-                ))}
+          <div className="w-full overflow-x-auto border border-slate-100 rounded-lg">
+            <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setViewMode('monthly')} className={`px-3 py-1 rounded ${viewMode === 'monthly' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border'}`}>Monthly</button>
+                <button onClick={() => setViewMode('daily')} className={`px-3 py-1 rounded ${viewMode === 'daily' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border'}`}>Daily</button>
+                {viewMode === 'daily' && (
+                  <select value={selectedMonthKey} onChange={e => setSelectedMonthKey(e.target.value)} className="ml-4 border rounded px-2 py-1 text-sm">
+                    {months.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="text-sm text-slate-500">Click a cell to view/edit items</div>
+            </div>
 
-                {categories.length === 0 && <tr><td colSpan={months.length + 1} className="p-8 text-center text-slate-400 italic">No categories configured. Add categories in Settings.</td></tr>}
-              </tbody>
-            </table>
+            {viewMode === 'monthly' ? (
+              <table className="w-full text-left text-sm table-fixed">
+                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3 w-64">Category / Expense</th>
+                    {months.map(m => (
+                      <th key={m.key} className="px-3 py-2 text-center">{m.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.map(cat => (
+                    <tr key={cat.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-medium flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {editingCategoryId === cat.id ? (
+                            <input autoFocus value={editingCategoryName} onChange={e => setEditingCategoryName(e.target.value)} onBlur={() => saveCategoryName(cat.id)} className="border rounded px-2 py-1 text-sm" />
+                          ) : (
+                            <span onDoubleClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }}>{cat.name}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }} className="text-slate-400 hover:text-indigo-600 p-1"><i className="fas fa-edit"></i></button>
+                          <button onClick={() => deleteCategory(cat.id)} className="text-rose-400 hover:text-rose-600 p-1"><i className="fas fa-trash"></i></button>
+                        </div>
+                      </td>
+                      {months.map(m => {
+                        const v = (gridTotals[cat.id] && gridTotals[cat.id][m.key]) || 0;
+                        return <td key={m.key} onClick={() => openCellModal(cat.id, m.key)} className="px-3 py-2 text-right cursor-pointer hover:bg-slate-50">{v ? v.toLocaleString() : '-'}</td>;
+                      })}
+                    </tr>
+                  ))}
+
+                  {categories.length === 0 && <tr><td colSpan={months.length + 1} className="p-8 text-center text-slate-400 italic">No categories configured. Add categories in Settings.</td></tr>}
+                </tbody>
+              </table>
+            ) : (
+              // Daily view for selected month
+              (() => {
+                const sel = months.find(m => m.key === selectedMonthKey) || months[0];
+                const year = sel.year;
+                const monthIndex = sel.month; // 0-based
+                const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+                const dayKeys = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+                return (
+                  <table className="w-full text-left text-sm table-fixed">
+                    <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3 w-64">Category / Expense</th>
+                        {dayKeys.map(d => <th key={d} className="px-2 py-2 text-center">{d}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categories.map(cat => (
+                        <tr key={cat.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3 font-medium">{cat.name}</td>
+                          {dayKeys.map(d => {
+                            const key = `${year}-${monthIndex + 1}`;
+                            const v = itemsForCell(cat.id, key, d).reduce((s, it) => s + it.amount, 0);
+                            return <td key={d} onClick={() => openCellModal(cat.id, key, d)} className="px-2 py-2 text-right cursor-pointer hover:bg-slate-50">{v ? v.toLocaleString() : '-'}</td>;
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()
+            )}
           </div>
         </div>
       </div>
