@@ -135,6 +135,7 @@ export interface CashFlowItem {
   id: string;
   bankId: string;
   date: string; // ISO date
+  categoryId?: string;
   amount: number;
   type: 'expense' | 'inflow';
   description?: string;
