@@ -167,8 +167,66 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
     );
   };
 
+  // --- Sidebar small form components (inline in this file) ---
+  const BankForm: React.FC = () => {
+    const [name, setName] = useState('');
+    const [balance, setBalanceLocal] = useState('0');
+    const handleAddBank = () => {
+      if (!name) return alert('Enter bank name');
+      const newBank: Bank = { id: `bank-${Date.now()}`, name, balance: Number(balance || 0) };
+      onUpdate({ banks: [...banks, newBank] });
+      setName(''); setBalanceLocal('0');
+    };
+    return (
+      <div className="space-y-2">
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Bank name" className="w-full border rounded px-2 py-1 text-sm" />
+        <input value={balance} onChange={e => setBalanceLocal(e.target.value)} placeholder="Balance" type="number" className="w-full border rounded px-2 py-1 text-sm" />
+        <button onClick={handleAddBank} className="w-full bg-indigo-600 text-white py-1 rounded text-sm">Add Bank</button>
+      </div>
+    );
+  };
+
+  const GroupForm: React.FC = () => {
+    const [gName, setGName] = useState('');
+    const [isCOGS, setIsCOGS] = useState(false);
+    const handleAddGroup = () => {
+      if (!gName) return alert('Enter group name');
+      const newG = { id: `grp-${Date.now()}`, name: gName, isCOGS };
+      onUpdate({ expenseGroups: [...(state.expenseGroups || []), newG] });
+      setGName(''); setIsCOGS(false);
+    };
+    return (
+      <div className="space-y-2">
+        <input value={gName} onChange={e => setGName(e.target.value)} placeholder="Group name" className="w-full border rounded px-2 py-1 text-sm" />
+        <label className="text-xs"><input type="checkbox" checked={isCOGS} onChange={e => setIsCOGS(e.target.checked)} className="mr-2" />COGS</label>
+        <button onClick={handleAddGroup} className="w-full bg-emerald-600 text-white py-1 rounded text-sm">Add Group</button>
+      </div>
+    );
+  };
+
+  const CategoryForm: React.FC = () => {
+    const [cName, setCName] = useState('');
+    const [groupId, setGroupId] = useState(state.expenseGroups?.[0]?.id || '');
+    const handleAddCat = () => {
+      if (!cName) return alert('Enter category name');
+      const newC = { id: `cat-${Date.now()}`, groupId: groupId || '', name: cName };
+      onUpdate({ expenseCategories: [...(state.expenseCategories || []), newC] });
+      setCName('');
+    };
+    return (
+      <div className="space-y-2">
+        <select value={groupId} onChange={e => setGroupId(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
+          <option value="">Select Group</option>
+          {(state.expenseGroups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <input value={cName} onChange={e => setCName(e.target.value)} placeholder="Category name" className="w-full border rounded px-2 py-1 text-sm" />
+        <button onClick={handleAddCat} className="w-full bg-amber-600 text-white py-1 rounded text-sm">Add Category</button>
+      </div>
+    );
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+    <div className="relative bg-white rounded-xl shadow-sm border border-slate-100 p-6">
       <h4 className="text-xl font-bold text-slate-800 mb-4">Cash Flow Forecast</h4>
       <div className="flex flex-col gap-6">
         <div>
@@ -321,6 +379,26 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
               })()
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Right-side compact sidebar (absolute) - does not change table size */}
+      <div className="absolute right-6 top-8 w-72 bg-white border border-slate-100 rounded-lg shadow-md p-4 z-40">
+        <h5 className="text-sm font-bold text-slate-700 mb-3">Quick Actions</h5>
+
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-slate-500 mb-2">Add Bank</p>
+          <BankForm />
+        </div>
+
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-slate-500 mb-2">Add Expense Group</p>
+          <GroupForm />
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold text-slate-500 mb-2">Add Category</p>
+          <CategoryForm />
         </div>
       </div>
     </div>
