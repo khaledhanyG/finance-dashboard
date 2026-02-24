@@ -22,7 +22,9 @@ const App: React.FC = () => {
     return INITIAL_STATE;
   });
 
-  const [activePage, setActivePage] = useState<'dashboard' | 'cashflow' | 'settings' | 'transactions' | 'reports' | 'tasks' | 'import'>('dashboard');
+  const [activePage, setActivePage] = useState<'dashboard' | 'cashflow' | 'settings' | 'transactions' | 'reports' | 'tasks' | 'import'>(() => {
+    return (localStorage.getItem('finpulse_active_page') as any) || 'dashboard';
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [deleteModal, setDeleteModal] = useState<{
@@ -67,6 +69,11 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('finpulse_state', JSON.stringify(state));
   }, [state]);
+
+  // Persist activePage
+  useEffect(() => {
+    localStorage.setItem('finpulse_active_page', activePage);
+  }, [activePage]);
 
   /* Sync Helper */
   const syncChanges = async (key: keyof AppState, oldList: any[], newList: any[]) => {
