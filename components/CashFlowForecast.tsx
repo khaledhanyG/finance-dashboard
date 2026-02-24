@@ -226,9 +226,11 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
   };
 
   return (
-    <div className="relative bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
       <h4 className="text-xl font-bold text-slate-800 mb-4">Cash Flow Forecast</h4>
-      <div className="flex flex-col gap-6">
+
+      <div className="flex gap-6 items-start">
+        <div className="flex-1 flex flex-col gap-6 min-w-0">
         <div>
           <h5 className="text-sm font-bold text-slate-600 mb-3">Banks</h5>
           <div className="flex flex-wrap gap-3 items-start">
@@ -380,11 +382,11 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
             )}
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* Right-side compact sidebar (absolute) - does not change table size */}
-      <div className="absolute right-6 top-8 w-72 bg-white border border-slate-100 rounded-lg shadow-md p-4 z-40">
-        <h5 className="text-sm font-bold text-slate-700 mb-3">Quick Actions</h5>
+        {/* Right-side compact sidebar (static) - beside the table */}
+        <div className="w-72 bg-white border border-slate-100 rounded-lg shadow-sm p-4 flex-shrink-0">
+          <h5 className="text-sm font-bold text-slate-700 mb-3">Quick Actions</h5>
 
         <div className="mb-4">
           <p className="text-xs font-semibold text-slate-500 mb-2">Add Bank</p>
@@ -400,6 +402,7 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
           <p className="text-xs font-semibold text-slate-500 mb-2">Add Category</p>
           <CategoryForm />
         </div>
+      </div>
       </div>
     </div>
   );
