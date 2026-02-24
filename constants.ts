@@ -13,4 +13,7 @@ export const INITIAL_STATE: AppState = {
   incomeEntries: [],
   outstandingExpenses: [],
   tasks: []
+  ,
+  banks: [],
+  cashFlowForecast: []
 };

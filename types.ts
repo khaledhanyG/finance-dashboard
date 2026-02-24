@@ -120,4 +120,22 @@ export interface AppState {
   incomeEntries: IncomeEntry[];
   outstandingExpenses: OutstandingExpense[];
   tasks: Task[];
+  banks?: Bank[];
+  cashFlowForecast?: CashFlowItem[];
+}
+
+export interface Bank {
+  id: string;
+  name: string;
+  balance: number;
+  currency?: string;
+}
+
+export interface CashFlowItem {
+  id: string;
+  bankId: string;
+  date: string; // ISO date
+  amount: number;
+  type: 'expense' | 'inflow';
+  description?: string;
 }

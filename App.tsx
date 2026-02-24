@@ -10,6 +10,7 @@ import { Tasks } from './components/Tasks';
 import { DeleteModal } from './components/DeleteModal';
 import { Login } from './components/Login';
 import { ImportData } from './components/ImportData';
+import CashFlowForecast from './components/CashFlowForecast';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>(() => {
@@ -21,7 +22,7 @@ const App: React.FC = () => {
     return INITIAL_STATE;
   });
 
-  const [activePage, setActivePage] = useState<'dashboard' | 'settings' | 'transactions' | 'reports' | 'tasks' | 'import'>('dashboard');
+  const [activePage, setActivePage] = useState<'dashboard' | 'cashflow' | 'settings' | 'transactions' | 'reports' | 'tasks' | 'import'>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [deleteModal, setDeleteModal] = useState<{
@@ -78,7 +79,7 @@ const App: React.FC = () => {
 
     // Execute Sync
     // We only sync specific keys that map to tables
-    const SYNC_KEYS = ['departments', 'employees', 'expenseGroups', 'expenseCategories', 'incomeServices', 'tasks', 'users'];
+      const SYNC_KEYS = ['departments', 'employees', 'expenseGroups', 'expenseCategories', 'incomeServices', 'tasks', 'users', 'banks', 'cashFlowForecast'];
     if (!SYNC_KEYS.includes(key)) return;
 
     for (const item of addedOrUpdated) {
@@ -272,6 +273,7 @@ const App: React.FC = () => {
 
   const navLinks = [
     { id: 'dashboard', icon: 'fa-gauge-high', label: 'Overview', show: isAdmin || userPerms.includes('dashboard') },
+    { id: 'cashflow', icon: 'fa-water', label: 'Cash Flow Forecast', show: isAdmin || userPerms.includes('cashflow') },
     { id: 'transactions', icon: 'fa-file-invoice-dollar', label: 'Accounting', show: isAdmin || userPerms.includes('transactions') },
     { id: 'tasks', icon: 'fa-list-check', label: 'Tasks', show: isAdmin || userPerms.includes('tasks') },
     { id: 'reports', icon: 'fa-file-contract', label: 'Reports', show: isAdmin || userPerms.includes('reports') },
@@ -363,6 +365,7 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col max-w-[1600px] mx-auto w-full">
         <main className="flex-1 p-4 md:p-8">
           {activePage === 'dashboard' && (isAdmin || userPerms.includes('dashboard')) && <Dashboard state={state} />}
+          {activePage === 'cashflow' && (isAdmin || userPerms.includes('cashflow')) && <CashFlowForecast state={state} onUpdate={updateState} onDelete={triggerDelete} />}
           {activePage === 'settings' && (isAdmin || userPerms.includes('settings')) && <Settings state={state} onUpdate={updateState} onDelete={triggerDelete} />}
           {activePage === 'reports' && (isAdmin || userPerms.includes('reports')) && <Reports state={state} />}
           {activePage === 'tasks' && (isAdmin || userPerms.includes('tasks')) && (

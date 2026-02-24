@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { AppState, Department, Employee, ExpenseGroup, ExpenseCategory, IncomeService, User, UserRole } from '../types';
+import { AppState, Department, Employee, ExpenseGroup, ExpenseCategory, IncomeService, User, UserRole, Bank } from '../types';
 
 interface SettingsProps {
   state: AppState;
@@ -32,6 +32,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
     { id: 'expenses', icon: 'fa-tags', label: 'Expense Groups', show: isAdmin },
     { id: 'income', icon: 'fa-hand-holding-dollar', label: 'Income Services', show: isAdmin },
     { id: 'users', icon: 'fa-user-shield', label: 'Access Control', show: isAdmin },
+    { id: 'cashflow', icon: 'fa-wallet', label: 'Cash Flow Forecast', show: isAdmin }
   ];
 
   return (
@@ -116,6 +117,14 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
             onRemove={(user) => onDelete(user.name, () => removeItem('users', user.id))}
           />
         )}
+        {activeTab === 'cashflow' && isAdmin && (
+          <BanksManager
+            items={state.banks || []}
+            onAdd={(name, balance) => addItem('banks', { id: `bank-${Date.now()}`, name, balance })}
+            onUpdate={(item) => updateItem('banks', item)}
+            onRemove={(bank) => onDelete(bank.name, () => removeItem('banks', bank.id))}
+          />
+        )}
       </div>
     </div>
   );
@@ -175,6 +184,7 @@ const ProfileManager: React.FC<{ user: User, onUpdate: (u: User) => void }> = ({
 
 const ALL_PAGES = [
   { id: 'dashboard', label: 'Overview' },
+  { id: 'cashflow', label: 'Cash Flow Forecast' },
   { id: 'transactions', label: 'Accounting' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'reports', label: 'Reports' },
@@ -656,6 +666,50 @@ const IncomeServiceManager: React.FC<{ items: IncomeService[], onAdd: (n: string
             </div>
           </li>
         ))}
+      </ul>
+    </div>
+  );
+};
+
+const BanksManager: React.FC<{ items: Bank[], onAdd: (n: string, b: number) => void, onUpdate: (b: Bank) => void, onRemove: (b: Bank) => void }> = ({ items, onAdd, onUpdate, onRemove }) => {
+  const [name, setName] = useState('');
+  const [balance, setBalance] = useState('0');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name) { onAdd(name, Number(balance || 0)); setName(''); setBalance('0'); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h4 className="text-xl font-bold text-slate-800">Banks</h4>
+      <form onSubmit={handleAdd} className="flex gap-2">
+        <input type="text" placeholder="Bank Name" value={name} onChange={e => setName(e.target.value)} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-100" />
+        <input type="number" placeholder="Balance" value={balance} onChange={e => setBalance(e.target.value)} className="w-40 border border-slate-200 rounded-lg px-3 py-2" />
+        <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">Add</button>
+      </form>
+
+      <ul className="divide-y divide-slate-100 border border-slate-100 rounded-lg overflow-hidden shadow-sm">
+        {items.map(bank => (
+          <li key={bank.id} className="flex justify-between items-center p-3 hover:bg-slate-50 transition-colors">
+            <div className="flex-1">
+              {editingId === bank.id ? (
+                <input autoFocus className="border rounded px-2 py-1 w-full" value={bank.name} onChange={(e) => onUpdate({ ...bank, name: e.target.value })} onKeyDown={e => e.key === 'Enter' && setEditingId(null)} onBlur={() => setEditingId(null)} />
+              ) : (
+                <div className="font-medium text-slate-700">{bank.name}</div>
+              )}
+              <div className="text-xs text-slate-500">Balance: <span className="font-bold text-indigo-600">{bank.balance.toLocaleString()}</span></div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setEditingId(editingId === bank.id ? null : bank.id)} className="text-slate-400 hover:text-indigo-600 p-2 transition-colors">
+                <i className={`fas ${editingId === bank.id ? 'fa-check text-emerald-500' : 'fa-edit'}`}></i>
+              </button>
+              <button onClick={() => onRemove(bank)} className="text-rose-400 hover:text-rose-600 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+            </div>
+          </li>
+        ))}
+        {items.length === 0 && <li className="p-8 text-center text-slate-400 italic">No banks added yet.</li>}
       </ul>
     </div>
   );
