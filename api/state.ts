@@ -89,9 +89,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const incomeRefundItemsRes = await client.query('SELECT * FROM "IncomeRefundItem"');
     const tasksRes = await client.query('SELECT * FROM "Task"');
     const usersRes = await client.query('SELECT id, email, name, role, permissions FROM "User"'); // Load users without passwords
-    const companiesRes = await client.query('SELECT * FROM "Company"');
-    const banksRes = await client.query('SELECT * FROM "Bank"');
-    const cashFlowForecastRes = await client.query('SELECT * FROM "CashFlowItem"');
+
+    // Resilient fetching for new tables
+    let companiesRes = { rows: [] };
+    let banksRes = { rows: [] };
+    let cashFlowForecastRes = { rows: [] };
+
+    try { companiesRes = await client.query('SELECT * FROM "Company"'); } catch (e) { console.warn("Failed to fetch companies:", e); }
+    try { banksRes = await client.query('SELECT * FROM "Bank"'); } catch (e) { console.warn("Failed to fetch banks:", e); }
+    try { cashFlowForecastRes = await client.query('SELECT * FROM "CashFlowItem"'); } catch (e) { console.warn("Failed to fetch cashFlowForecast:", e); }
 
     const incomeEntries = incomeEntriesRes.rows.map(mapIncome).map(inc => ({
       ...inc,
