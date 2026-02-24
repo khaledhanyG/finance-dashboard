@@ -1,409 +1,490 @@
 import React, { useState, useMemo } from 'react';
-import { AppState, Bank, CashFlowItem, ExpenseCategory } from '../types';
+import { AppState, Bank, CashFlowItem, Company } from '../types';
 
 const maxDate = '2026-12-31';
 
+const EXPENSE_ROWS = [
+  'Employment cost',
+  'Inspectors Offices & Freelancers',
+  'Commission',
+  'Fixed Assets',
+  'Office Rental',
+  'Loan',
+  'Professional fees',
+  'Marketing',
+  'Others'
+];
+
 const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppState>) => void; onDelete?: (name: string, onConfirm: () => void) => void }> = ({ state, onUpdate }) => {
+  const companies: Company[] = state.companies || [];
   const banks: Bank[] = state.banks || [];
   const items: CashFlowItem[] = state.cashFlowForecast || [];
 
-  const categories: ExpenseCategory[] = state.expenseCategories || [];
+  // Quick Actions State
+  const [companyName, setCompanyName] = useState('');
+  const [bankForm, setBankForm] = useState({ name: '', balance: '', companyId: '' });
+  const [entryForm, setEntryForm] = useState({
+    companyId: '',
+    bankId: '',
+    date: '',
+    amount: '',
+    type: 'expense' as 'expense' | 'inflow_b2b' | 'inflow_b2c',
+    categoryId: EXPENSE_ROWS[0],
+    description: '',
+    recurring: false
+  });
 
-  const [form, setForm] = useState({ bankId: banks[0]?.id || '', date: '', amount: '', type: 'expense', description: '', categoryId: categories[0]?.id || '', recurring: false });
-  const [editingBankId, setEditingBankId] = useState<string | null>(null);
-  const [bankEditValue, setBankEditValue] = useState<string>('0');
+  const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly'); // Keeping simple for now
+  const [cellModal, setCellModal] = useState<{ open: boolean; companyId?: string; monthKey?: string; type?: string; category?: string; bankId?: string }>({ open: false });
 
-  const handleAdd = (e: React.FormEvent) => {
+  // --- Handlers ---
+  const handleAddCompany = () => {
+    if (!companyName) return alert('Enter company name');
+    const newCompany: Company = { id: `comp-${Date.now()}`, name: companyName };
+    onUpdate({ companies: [...companies, newCompany] });
+    setCompanyName('');
+  };
+
+  const handleAddBank = () => {
+    if (!bankForm.name || !bankForm.companyId) return alert('Enter bank name and select company');
+    const newBank: Bank = {
+      id: `bank-${Date.now()}`,
+      name: bankForm.name,
+      balance: Number(bankForm.balance || 0),
+      companyId: bankForm.companyId
+    };
+    onUpdate({ banks: [...banks, newBank] });
+    setBankForm({ ...bankForm, name: '', balance: '' });
+  };
+
+  const handleAddEntry = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.bankId || !form.date || !form.amount) return;
-    if (form.date > maxDate) { alert('Date must be on or before 2026-12-31'); return; }
+    if (!entryForm.companyId || !entryForm.date || !entryForm.amount) return alert('Missing fields');
+    if (entryForm.date > maxDate) { alert('Date must be on or before 2026-12-31'); return; }
+
     const created: CashFlowItem[] = [];
-    const baseDate = new Date(form.date);
+    const baseDate = new Date(entryForm.date);
     const end = new Date(2026, 11, 31);
 
-    if (form.recurring) {
-      // create one per month from selected month until Dec 2026
+    const itemBase = {
+      bankId: entryForm.bankId || undefined,
+      companyId: entryForm.companyId,
+      amount: Number(entryForm.amount),
+      type: entryForm.type,
+      description: entryForm.description,
+      categoryId: entryForm.type === 'expense' ? entryForm.categoryId : undefined
+    };
+
+    if (entryForm.recurring) {
       const year = baseDate.getFullYear();
       let month = baseDate.getMonth();
       let cur = new Date(year, month, baseDate.getDate());
       while (cur <= end) {
-        created.push({ id: `cf-${Date.now()}-${created.length}`, bankId: form.bankId, date: cur.toISOString().slice(0,10), amount: Number(form.amount), type: form.type as 'expense'|'inflow', description: form.description, categoryId: form.categoryId || undefined });
+        created.push({ ...itemBase, id: `cf-${Date.now()}-${created.length}`, date: cur.toISOString().slice(0,10) });
         month++;
         cur = new Date(cur.getFullYear(), month, baseDate.getDate());
       }
     } else {
-      created.push({ id: `cf-${Date.now()}`, bankId: form.bankId, date: form.date, amount: Number(form.amount), type: form.type as 'expense'|'inflow', description: form.description, categoryId: form.categoryId || undefined });
+      created.push({ ...itemBase, id: `cf-${Date.now()}`, date: entryForm.date });
     }
 
     onUpdate({ cashFlowForecast: [...items, ...created] });
-    setForm({ ...form, amount: '', description: '' });
+    setEntryForm({ ...entryForm, amount: '', description: '' });
   };
 
-  const handleDelete = (id: string) => {
+  const deleteItem = (id: string) => {
     onUpdate({ cashFlowForecast: items.filter(i => i.id !== id) });
+    setCellModal({ ...cellModal, open: false });
   };
 
-  const handleBankSave = (bank: Bank) => {
-    const newBanks = (banks || []).map(b => b.id === bank.id ? bank : b);
-    onUpdate({ banks: newBanks });
-    setEditingBankId(null);
+  const updateItem = (newItem: CashFlowItem) => {
+    onUpdate({ cashFlowForecast: items.map(i => i.id === newItem.id ? newItem : i) });
   };
 
+
+  // --- Data Processing ---
   const months = useMemo(() => {
     const out: { key: string; label: string; year: number; month: number }[] = [];
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    // Start from Jan 2026 as per requirement "Jan-26"
+    // Wait, prompt says "Jan-26 | Feb-26 etc...".
+    // Is it strictly 2026? Or starting from current?
+    // User logic previously was from current month to Dec 2026.
+    // I'll stick to 2026 for now if that's the request, or use the dynamic range.
+    // Let's use 2026 entirely for the headers as per "Jan-26".
+    const start = new Date(2026, 0, 1);
     const end = new Date(2026, 11, 31);
-    let cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    let cur = new Date(start);
     while (cur <= end) {
-      out.push({ key: `${cur.getFullYear()}-${cur.getMonth() + 1}`, label: cur.toLocaleString(undefined, { month: 'short', year: 'numeric' }), year: cur.getFullYear(), month: cur.getMonth() });
+      out.push({ key: `${cur.getFullYear()}-${cur.getMonth() + 1}`, label: cur.toLocaleString(undefined, { month: 'short', year: '2-digit' }), year: cur.getFullYear(), month: cur.getMonth() });
       cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
     }
     return out;
-  }, [state]);
+  }, []);
 
-  const gridTotals = useMemo(() => {
-    // map categoryId -> monthKey -> sum
-    const map: Record<string, Record<string, number>> = {};
-    items.forEach(it => {
-      if (!it.categoryId || it.type !== 'expense') return;
-      const d = new Date(it.date);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      map[it.categoryId] = map[it.categoryId] || {};
-      map[it.categoryId][key] = (map[it.categoryId][key] || 0) + it.amount;
+  const companyData = useMemo(() => {
+    const data: Record<string, any> = {};
+
+    companies.forEach(comp => {
+      // Initialize structure
+      data[comp.id] = {
+        banks: {}, // bankId -> monthKey -> balance
+        b2b: {},   // monthKey -> total
+        b2c: {},   // monthKey -> total
+        cashIn: {}, // monthKey -> total
+        expenses: {}, // category -> monthKey -> total
+        cashOut: {}, // monthKey -> total
+        net: {} // monthKey -> total
+      };
+
+      // Initialize banks for this company
+      const compBanks = banks.filter(b => b.companyId === comp.id);
+      compBanks.forEach(b => {
+        data[comp.id].banks[b.id] = { start: b.balance, months: {} };
+      });
+
+      // Initialize expense rows
+      EXPENSE_ROWS.forEach(row => {
+        data[comp.id].expenses[row] = {};
+      });
     });
-    return map;
-  }, [items]);
 
-  const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly');
-  const [selectedMonthKey, setSelectedMonthKey] = useState<string>(months[0]?.key || '');
+    // Process all items
+    // First, group items by month/company/type
+    // We need to process chronologically for bank balances?
+    // Or just bucket them. Bank balance requires chronological.
 
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [editingCategoryName, setEditingCategoryName] = useState<string>('');
+    // Let's bucket items first
+    const itemsByMonthComp: Record<string, CashFlowItem[]> = {}; // key: "compId-monthKey"
 
-  const [cellModal, setCellModal] = useState<{
-    open: boolean;
-    categoryId?: string;
-    monthKey?: string;
-    day?: number;
-  }>({ open: false });
+    items.forEach(it => {
+       if (!it.companyId) return;
+       const d = new Date(it.date);
+       // Only care about 2026? Or all time?
+       // If item is before 2026, it should affect opening balance of 2026?
+       // Assume "Balance" in Bank definition is "Starting Balance".
+       // And items are future items.
+       // So we filter for 2026 items for the table cells.
+       const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
 
-  const openCellModal = (categoryId: string, monthKey: string, day?: number) => {
-    setCellModal({ open: true, categoryId, monthKey, day });
-  };
+       if (!data[it.companyId]) return; // Company deleted?
 
-  const closeCellModal = () => setCellModal({ open: false });
+       // Aggregate totals
+       if (it.type === 'inflow_b2b') {
+         data[it.companyId].b2b[key] = (data[it.companyId].b2b[key] || 0) + it.amount;
+         data[it.companyId].cashIn[key] = (data[it.companyId].cashIn[key] || 0) + it.amount;
+       } else if (it.type === 'inflow_b2c') {
+         data[it.companyId].b2c[key] = (data[it.companyId].b2c[key] || 0) + it.amount;
+         data[it.companyId].cashIn[key] = (data[it.companyId].cashIn[key] || 0) + it.amount;
+       } else if (it.type === 'expense') {
+         const cat = it.categoryId || 'Others';
+         data[it.companyId].expenses[cat][key] = (data[it.companyId].expenses[cat][key] || 0) + it.amount;
+         data[it.companyId].cashOut[key] = (data[it.companyId].cashOut[key] || 0) + it.amount;
+       }
+    });
 
-  const itemsForCell = (categoryId: string, monthKey: string, day?: number) => {
-    return items.filter(it => it.categoryId === categoryId && (() => {
+    // Calculate Bank Balances
+    // For each bank, running balance = Start + Sum(Inflows linked to bank) - Sum(Expenses linked to bank)
+    // We iterate months.
+    companies.forEach(comp => {
+      const compBanks = banks.filter(b => b.companyId === comp.id);
+      compBanks.forEach(b => {
+        let currentBal = b.balance;
+        // Note: Logic assumes b.balance is "Current" or "Start of 2026"?
+        // If items exist before 2026, we should process them too.
+        // For simplicity, let's assume b.balance is current actual balance, and we project forward from "Now" or just for 2026.
+        // User asked for "Jan-26".
+        // We'll assume simple accumulation for displayed months.
+
+        months.forEach(m => {
+          // Find items for this month, this bank
+          const monthItems = items.filter(it => {
+            if (it.companyId !== comp.id || it.bankId !== b.id) return false;
+            const d = new Date(it.date);
+            return `${d.getFullYear()}-${d.getMonth() + 1}` === m.key;
+          });
+
+          const inAmt = monthItems.filter(i => i.type.startsWith('inflow')).reduce((s, i) => s + i.amount, 0);
+          const outAmt = monthItems.filter(i => i.type === 'expense').reduce((s, i) => s + i.amount, 0);
+
+          currentBal = currentBal + inAmt - outAmt;
+          data[comp.id].banks[b.id].months[m.key] = currentBal;
+        });
+      });
+    });
+
+    return data;
+  }, [items, companies, banks, months]);
+
+  // Totals Calculation
+  const overallData = useMemo(() => {
+    const total: any = {
+      banks: {}, // monthKey -> total balance across all banks
+      receivables: {}, // Placeholder
+      expected: {}, // monthKey -> B2B + B2C total
+      cashIn: {},
+      expenses: {}, // category -> monthKey -> total
+      cashOut: {},
+      net: {}
+    };
+
+    months.forEach(m => {
+      let mBankTotal = 0;
+      let mExpected = 0;
+      let mCashIn = 0;
+      let mCashOut = 0;
+
+      // Sum from companies
+      companies.forEach(comp => {
+        const cData = companyData[comp.id];
+        if (!cData) return;
+
+        // Banks
+        const compBanks = banks.filter(b => b.companyId === comp.id);
+        compBanks.forEach(b => {
+          mBankTotal += (cData.banks[b.id].months[m.key] || 0);
+        });
+
+        // Cash In
+        mExpected += (cData.b2b[m.key] || 0) + (cData.b2c[m.key] || 0);
+        mCashIn += (cData.cashIn[m.key] || 0);
+
+        // Cash Out
+        mCashOut += (cData.cashOut[m.key] || 0);
+
+        // Expenses per cat
+        EXPENSE_ROWS.forEach(cat => {
+          total.expenses[cat] = total.expenses[cat] || {};
+          total.expenses[cat][m.key] = (total.expenses[cat][m.key] || 0) + (cData.expenses[cat][m.key] || 0);
+        });
+      });
+
+      total.banks[m.key] = mBankTotal;
+      total.expected[m.key] = mExpected;
+      total.cashIn[m.key] = mCashIn;
+      total.cashOut[m.key] = mCashOut;
+      total.net[m.key] = mCashIn - mCashOut;
+    });
+
+    return total;
+  }, [companyData, companies, banks, months]);
+
+  // Modal List
+  const getModalItems = () => {
+    if (!cellModal.open || !cellModal.companyId || !cellModal.monthKey) return [];
+    return items.filter(it => {
+      if (it.companyId !== cellModal.companyId) return false;
       const d = new Date(it.date);
       const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      if (key !== monthKey) return false;
-      if (day) return d.getDate() === day;
-      return true;
-    })());
+      if (key !== cellModal.monthKey) return false;
+
+      if (cellModal.bankId) return it.bankId === cellModal.bankId; // Bank cell
+      if (cellModal.type === 'b2b') return it.type === 'inflow_b2b';
+      if (cellModal.type === 'b2c') return it.type === 'inflow_b2c';
+      if (cellModal.type === 'cashIn') return it.type.startsWith('inflow');
+      if (cellModal.category) return it.categoryId === cellModal.category;
+      if (cellModal.type === 'cashOut') return it.type === 'expense';
+
+      return false;
+    });
   };
 
-  const saveCategoryName = (catId: string) => {
-    const updated = (state.expenseCategories || []).map(c => c.id === catId ? { ...c, name: editingCategoryName } : c);
-    onUpdate({ expenseCategories: updated });
-    setEditingCategoryId(null);
-  };
-
-  const deleteCategory = (catId: string) => {
-    if (!confirm('Delete category and its forecast items?')) return;
-    const updatedCats = (state.expenseCategories || []).filter(c => c.id !== catId);
-    const updatedItems = (items || []).filter(i => i.categoryId !== catId);
-    onUpdate({ expenseCategories: updatedCats, cashFlowForecast: updatedItems });
-  };
-
-  const updateForecastItem = (updatedItem: CashFlowItem) => {
-    const newItems = items.map(i => i.id === updatedItem.id ? updatedItem : i);
-    onUpdate({ cashFlowForecast: newItems });
-  };
-
-  const removeForecastItem = (id: string) => {
-    const newItems = items.filter(i => i.id !== id);
-    onUpdate({ cashFlowForecast: newItems });
-  };
-
-  // Modal content renderer
-  const CellModalContent: React.FC = () => {
-    if (!cellModal.open || !cellModal.categoryId || !cellModal.monthKey) return null;
-    const list = itemsForCell(cellModal.categoryId, cellModal.monthKey, cellModal.day);
-    return (
-      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-6 w-[900px] max-w-full">
-          <div className="flex justify-between items-center mb-4">
-            <h4 className="font-bold">Items for {state.expenseCategories.find(c=>c.id===cellModal.categoryId)?.name} {cellModal.day ? `(day ${cellModal.day})` : `(${cellModal.monthKey})`}</h4>
-            <button onClick={closeCellModal} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times"></i></button>
-          </div>
-          <div className="space-y-3">
-            {list.length === 0 && <div className="text-slate-400 italic">No items</div>}
-            {list.map(it => (
-              <div key={it.id} className="p-3 border rounded flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{it.description || '(no desc)'}</div>
-                  <div className="text-xs text-slate-500">{it.date} • {banks.find(b=>b.id===it.bankId)?.name || 'Unknown'} • {it.type} • {it.amount.toLocaleString()}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => {
-                    const edit = { ...it };
-                    const newAmount = prompt('Amount', String(edit.amount));
-                    if (newAmount === null) return;
-                    edit.amount = Number(newAmount);
-                    const newDesc = prompt('Description', edit.description || '');
-                    if (newDesc === null) return;
-                    edit.description = newDesc;
-                    updateForecastItem(edit);
-                  }} className="text-indigo-600">Edit</button>
-                  <button onClick={() => { if (confirm('Delete item?')) removeForecastItem(it.id); }} className="text-rose-500">Delete</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // --- Sidebar small form components (inline in this file) ---
-  const BankForm: React.FC = () => {
-    const [name, setName] = useState('');
-    const [balance, setBalanceLocal] = useState('0');
-    const handleAddBank = () => {
-      if (!name) return alert('Enter bank name');
-      const newBank: Bank = { id: `bank-${Date.now()}`, name, balance: Number(balance || 0) };
-      onUpdate({ banks: [...banks, newBank] });
-      setName(''); setBalanceLocal('0');
-    };
-    return (
-      <div className="space-y-2">
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Bank name" className="w-full border rounded px-2 py-1 text-sm" />
-        <input value={balance} onChange={e => setBalanceLocal(e.target.value)} placeholder="Balance" type="number" className="w-full border rounded px-2 py-1 text-sm" />
-        <button onClick={handleAddBank} className="w-full bg-indigo-600 text-white py-1 rounded text-sm">Add Bank</button>
-      </div>
-    );
-  };
-
-  const GroupForm: React.FC = () => {
-    const [gName, setGName] = useState('');
-    const [isCOGS, setIsCOGS] = useState(false);
-    const handleAddGroup = () => {
-      if (!gName) return alert('Enter group name');
-      const newG = { id: `grp-${Date.now()}`, name: gName, isCOGS };
-      onUpdate({ expenseGroups: [...(state.expenseGroups || []), newG] });
-      setGName(''); setIsCOGS(false);
-    };
-    return (
-      <div className="space-y-2">
-        <input value={gName} onChange={e => setGName(e.target.value)} placeholder="Group name" className="w-full border rounded px-2 py-1 text-sm" />
-        <label className="text-xs"><input type="checkbox" checked={isCOGS} onChange={e => setIsCOGS(e.target.checked)} className="mr-2" />COGS</label>
-        <button onClick={handleAddGroup} className="w-full bg-emerald-600 text-white py-1 rounded text-sm">Add Group</button>
-      </div>
-    );
-  };
-
-  const CategoryForm: React.FC = () => {
-    const [cName, setCName] = useState('');
-    const [groupId, setGroupId] = useState(state.expenseGroups?.[0]?.id || '');
-    const handleAddCat = () => {
-      if (!cName) return alert('Enter category name');
-      const newC = { id: `cat-${Date.now()}`, groupId: groupId || '', name: cName };
-      onUpdate({ expenseCategories: [...(state.expenseCategories || []), newC] });
-      setCName('');
-    };
-    return (
-      <div className="space-y-2">
-        <select value={groupId} onChange={e => setGroupId(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
-          <option value="">Select Group</option>
-          {(state.expenseGroups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
-        <input value={cName} onChange={e => setCName(e.target.value)} placeholder="Category name" className="w-full border rounded px-2 py-1 text-sm" />
-        <button onClick={handleAddCat} className="w-full bg-amber-600 text-white py-1 rounded text-sm">Add Category</button>
-      </div>
-    );
-  };
+  const modalList = getModalItems();
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
       <h4 className="text-xl font-bold text-slate-800 mb-4">Cash Flow Forecast</h4>
 
-      <div className="flex gap-6 items-start">
-        <div className="flex-1 flex flex-col gap-6 min-w-0">
-        <div>
-          <h5 className="text-sm font-bold text-slate-600 mb-3">Banks</h5>
-          <div className="flex flex-wrap gap-3 items-start">
-            {banks.length === 0 && <div className="text-slate-400 italic">No banks configured. Add banks in Organization &gt; Configuration.</div>}
-            {banks.map(b => (
-              <div key={b.id} className="p-2 border border-slate-100 rounded-md bg-slate-50 flex items-center gap-3 w-44 text-sm">
-                <div className="flex-1">
-                  <div className="font-medium text-slate-800 truncate">{b.name}</div>
-                  <div className="text-[11px] text-slate-500">Balance: <span className="font-bold text-indigo-600">{b.balance.toLocaleString()}</span></div>
-                </div>
-                <div>
-                  {editingBankId === b.id ? (
-                    <div className="flex items-center gap-2">
-                      <input type="number" value={bankEditValue} onChange={e => setBankEditValue(e.target.value)} className="w-20 border rounded px-2 py-1 text-sm" />
-                      <button onClick={() => handleBankSave({ ...b, balance: Number(bankEditValue || 0) })} className="bg-emerald-600 text-white px-2 py-1 rounded text-xs">Save</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => { setEditingBankId(b.id); setBankEditValue(String(b.balance || 0)); }} className="text-slate-400 hover:text-indigo-600 p-1"><i className="fas fa-pen"></i></button>
-                  )}
-                </div>
-              </div>
-            ))}
+      {/* Quick Actions Panel */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-6 flex flex-wrap gap-6 items-end text-xs">
+        <div className="flex flex-col gap-1 w-40">
+          <label className="font-bold text-slate-500 uppercase">New Company</label>
+          <div className="flex gap-1">
+            <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Name" className="w-full border rounded px-2 py-1" />
+            <button onClick={handleAddCompany} className="bg-indigo-600 text-white px-2 rounded hover:bg-indigo-700">Add</button>
           </div>
         </div>
 
-        <div>
-          <form onSubmit={handleAdd} className="flex gap-2 items-end mb-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
-            <div className="flex-1">
-              <label className="block text-xs text-slate-500 uppercase font-bold mb-1">Bank</label>
-              <select className="w-full border rounded px-2 py-2" value={form.bankId} onChange={e => setForm({ ...form, bankId: e.target.value })}>
-                <option value="">Select Bank</option>
-                {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
-            <div className="w-56">
-              <label className="block text-xs text-slate-500 uppercase font-bold mb-1">Category</label>
-              <select className="w-full border rounded px-2 py-2" value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })}>
-                <option value="">-- none --</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 uppercase font-bold mb-1">Date</label>
-              <input type="date" max={maxDate} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="border rounded px-2 py-2" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 uppercase font-bold mb-1">Amount</label>
-              <input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} className="border rounded px-2 py-2 w-36" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 uppercase font-bold mb-1">Type</label>
-              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="border rounded px-2 py-2 w-36">
-                <option value="expense">Expense</option>
-                <option value="inflow">Inflow</option>
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs text-slate-500 uppercase font-bold mb-1">Description</label>
-              <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full border rounded px-2 py-2" />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs"><input type="checkbox" checked={form.recurring} onChange={e => setForm({ ...form, recurring: e.target.checked })} className="mr-2" />Recurring monthly</label>
-              <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg">Add</button>
-            </div>
+        <div className="flex flex-col gap-1 w-64">
+          <label className="font-bold text-slate-500 uppercase">New Bank</label>
+          <div className="flex gap-1">
+            <select value={bankForm.companyId} onChange={e => setBankForm({...bankForm, companyId: e.target.value})} className="border rounded px-2 py-1 w-1/3">
+              <option value="">Company...</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <input value={bankForm.name} onChange={e => setBankForm({...bankForm, name: e.target.value})} placeholder="Bank Name" className="border rounded px-2 py-1 w-1/3" />
+            <input value={bankForm.balance} onChange={e => setBankForm({...bankForm, balance: e.target.value})} placeholder="Balance" type="number" className="border rounded px-2 py-1 w-1/4" />
+            <button onClick={handleAddBank} className="bg-emerald-600 text-white px-2 rounded hover:bg-emerald-700">Add</button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1 flex-1 min-w-[600px]">
+          <label className="font-bold text-slate-500 uppercase">New Entry</label>
+          <form onSubmit={handleAddEntry} className="flex gap-2 items-end">
+             <select className="w-32 border rounded px-2 py-1" value={entryForm.companyId} onChange={e => setEntryForm({ ...entryForm, companyId: e.target.value })}>
+               <option value="">Company...</option>
+               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+             </select>
+
+             <select className="w-32 border rounded px-2 py-1" value={entryForm.bankId} onChange={e => setEntryForm({ ...entryForm, bankId: e.target.value })}>
+               <option value="">Bank (Opt)</option>
+               {banks.filter(b => b.companyId === entryForm.companyId).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+             </select>
+
+             <select className="w-28 border rounded px-2 py-1" value={entryForm.type} onChange={e => setEntryForm({ ...entryForm, type: e.target.value as any })}>
+               <option value="expense">Expense</option>
+               <option value="inflow_b2b">Expected B2B</option>
+               <option value="inflow_b2c">Expected B2C</option>
+             </select>
+
+             {entryForm.type === 'expense' && (
+               <select className="w-40 border rounded px-2 py-1" value={entryForm.categoryId} onChange={e => setEntryForm({ ...entryForm, categoryId: e.target.value })}>
+                 {EXPENSE_ROWS.map(r => <option key={r} value={r}>{r}</option>)}
+               </select>
+             )}
+
+             <input type="date" max={maxDate} value={entryForm.date} onChange={e => setEntryForm({ ...entryForm, date: e.target.value })} className="w-32 border rounded px-2 py-1" />
+             <input type="number" placeholder="Amount" value={entryForm.amount} onChange={e => setEntryForm({ ...entryForm, amount: e.target.value })} className="w-24 border rounded px-2 py-1" />
+             <input placeholder="Desc" value={entryForm.description} onChange={e => setEntryForm({ ...entryForm, description: e.target.value })} className="flex-1 border rounded px-2 py-1" />
+
+             <div className="flex items-center gap-1">
+                <input type="checkbox" checked={entryForm.recurring} onChange={e => setEntryForm({ ...entryForm, recurring: e.target.checked })} />
+                <button type="submit" className="bg-amber-600 text-white px-3 py-1 rounded hover:bg-amber-700">Add</button>
+             </div>
           </form>
+        </div>
+      </div>
 
-          <div className="w-full overflow-x-auto border border-slate-100 rounded-lg">
-            <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-slate-50">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setViewMode('monthly')} className={`px-3 py-1 rounded ${viewMode === 'monthly' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border'}`}>Monthly</button>
-                <button onClick={() => setViewMode('daily')} className={`px-3 py-1 rounded ${viewMode === 'daily' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border'}`}>Daily</button>
-                {viewMode === 'daily' && (
-                  <select value={selectedMonthKey} onChange={e => setSelectedMonthKey(e.target.value)} className="ml-4 border rounded px-2 py-1 text-sm">
-                    {months.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </select>
-                )}
+      {/* Tables Area */}
+      <div className="space-y-12">
+        {companies.map(comp => {
+          const cData = companyData[comp.id];
+          if (!cData) return null;
+          const compBanks = banks.filter(b => b.companyId === comp.id);
+
+          return (
+            <div key={comp.id} className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="bg-slate-100 px-4 py-2 font-bold text-lg text-slate-700 flex justify-between">
+                 <span>{comp.name}</span>
+                 <button onClick={() => { if(confirm('Delete company?')) onUpdate({ companies: companies.filter(c => c.id !== comp.id) }) }} className="text-xs text-rose-500">Delete</button>
               </div>
-              <div className="text-sm text-slate-500">Click a cell to view/edit items</div>
-            </div>
-
-            {viewMode === 'monthly' ? (
-              <table className="w-full text-left text-sm table-fixed">
-                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
-                  <tr>
-                    <th className="px-4 py-3 w-64">Category / Expense</th>
-                    {months.map(m => (
-                      <th key={m.key} className="px-3 py-2 text-center">{m.label}</th>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-right table-fixed border-collapse">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="p-2 w-64 text-left border-b border-r border-slate-200">Item</th>
+                      {months.map(m => <th key={m.key} className="p-2 w-24 border-b border-slate-200">{m.label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Banks */}
+                    {compBanks.map(b => (
+                      <tr key={b.id} className="hover:bg-slate-50">
+                        <td className="p-2 text-left border-r border-slate-200 font-medium text-slate-600">Available in {b.name}</td>
+                        {months.map(m => (
+                          <td key={m.key} onClick={() => setCellModal({ open: true, companyId: comp.id, monthKey: m.key, bankId: b.id })} className="p-2 border-b border-slate-100 cursor-pointer">
+                            {(cData.banks[b.id].months[m.key] || 0).toLocaleString()}
+                          </td>
+                        ))}
+                      </tr>
                     ))}
+
+                    {/* Income */}
+                    <tr className="hover:bg-slate-50"><td className="p-2 text-left border-r border-slate-200">Expected B2B</td>{months.map(m => <td key={m.key} onClick={() => setCellModal({ open: true, companyId: comp.id, monthKey: m.key, type: 'b2b' })} className="p-2 border-b border-slate-100 cursor-pointer">{(cData.b2b[m.key] || 0).toLocaleString()}</td>)}</tr>
+                    <tr className="hover:bg-slate-50"><td className="p-2 text-left border-r border-slate-200">Expected B2C</td>{months.map(m => <td key={m.key} onClick={() => setCellModal({ open: true, companyId: comp.id, monthKey: m.key, type: 'b2c' })} className="p-2 border-b border-slate-100 cursor-pointer">{(cData.b2c[m.key] || 0).toLocaleString()}</td>)}</tr>
+                    <tr className="bg-emerald-50 font-bold"><td className="p-2 text-left border-r border-slate-200">Cash In</td>{months.map(m => <td key={m.key} onClick={() => setCellModal({ open: true, companyId: comp.id, monthKey: m.key, type: 'cashIn' })} className="p-2 border-b border-slate-200 cursor-pointer">{(cData.cashIn[m.key] || 0).toLocaleString()}</td>)}</tr>
+
+                    {/* Spacer */}
+                    <tr><td className="p-2 border-r border-slate-200">&nbsp;</td>{months.map(m => <td key={m.key} className="border-b border-slate-100"></td>)}</tr>
+
+                    {/* Expenses */}
+                    {EXPENSE_ROWS.map(row => (
+                      <tr key={row} className="hover:bg-slate-50">
+                        <td className="p-2 text-left border-r border-slate-200">{row}</td>
+                        {months.map(m => (
+                          <td key={m.key} onClick={() => setCellModal({ open: true, companyId: comp.id, monthKey: m.key, category: row, type: 'cashOut' })} className="p-2 border-b border-slate-100 cursor-pointer">
+                            {(cData.expenses[row][m.key] || 0).toLocaleString()}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    <tr className="bg-rose-50 font-bold"><td className="p-2 text-left border-r border-slate-200">Cash Out</td>{months.map(m => <td key={m.key} onClick={() => setCellModal({ open: true, companyId: comp.id, monthKey: m.key, type: 'cashOut' })} className="p-2 border-b border-slate-200 cursor-pointer">{(cData.cashOut[m.key] || 0).toLocaleString()}</td>)}</tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Totals Table */}
+        {companies.length > 0 && (
+          <div className="border border-slate-300 rounded-lg overflow-hidden mt-8 shadow-md">
+            <div className="bg-indigo-900 px-4 py-2 font-bold text-lg text-white">Total Overall</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-right table-fixed border-collapse">
+                <thead className="bg-indigo-50 text-indigo-900">
+                  <tr>
+                    <th className="p-2 w-64 text-left border-b border-r border-indigo-200">Item</th>
+                    {months.map(m => <th key={m.key} className="p-2 w-24 border-b border-indigo-200">{m.label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {categories.map(cat => (
-                    <tr key={cat.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 font-medium flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {editingCategoryId === cat.id ? (
-                            <input autoFocus value={editingCategoryName} onChange={e => setEditingCategoryName(e.target.value)} onBlur={() => saveCategoryName(cat.id)} className="border rounded px-2 py-1 text-sm" />
-                          ) : (
-                            <span onDoubleClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }}>{cat.name}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }} className="text-slate-400 hover:text-indigo-600 p-1"><i className="fas fa-edit"></i></button>
-                          <button onClick={() => deleteCategory(cat.id)} className="text-rose-400 hover:text-rose-600 p-1"><i className="fas fa-trash"></i></button>
-                        </div>
-                      </td>
-                      {months.map(m => {
-                        const v = (gridTotals[cat.id] && gridTotals[cat.id][m.key]) || 0;
-                        return <td key={m.key} onClick={() => openCellModal(cat.id, m.key)} className="px-3 py-2 text-right cursor-pointer hover:bg-slate-50">{v ? v.toLocaleString() : '-'}</td>;
-                      })}
-                    </tr>
-                  ))}
+                   <tr className="font-bold"><td className="p-2 text-left border-r border-slate-200">Available in Banks</td>{months.map(m => <td key={m.key} className="p-2 border-b border-slate-100">{(overallData.banks[m.key] || 0).toLocaleString()}</td>)}</tr>
+                   <tr><td className="p-2 text-left border-r border-slate-200">Receivables</td>{months.map(m => <td key={m.key} className="p-2 border-b border-slate-100">-</td>)}</tr>
+                   <tr><td className="p-2 text-left border-r border-slate-200">Expected</td>{months.map(m => <td key={m.key} className="p-2 border-b border-slate-100">{(overallData.expected[m.key] || 0).toLocaleString()}</td>)}</tr>
+                   <tr className="bg-emerald-100 font-black"><td className="p-2 text-left border-r border-slate-200">Cash In</td>{months.map(m => <td key={m.key} className="p-2 border-b border-slate-200">{(overallData.cashIn[m.key] || 0).toLocaleString()}</td>)}</tr>
 
-                  {categories.length === 0 && <tr><td colSpan={months.length + 1} className="p-8 text-center text-slate-400 italic">No categories configured. Add categories in Settings.</td></tr>}
+                   <tr><td className="p-2 border-r border-slate-200 font-bold text-left pt-4">Expenses Overall</td>{months.map(m => <td key={m.key}></td>)}</tr>
+
+                   {EXPENSE_ROWS.map(row => (
+                      <tr key={row}>
+                        <td className="p-2 text-left border-r border-slate-200 pl-4">{row}</td>
+                        {months.map(m => (
+                          <td key={m.key} className="p-2 border-b border-slate-100">{(overallData.expenses[row][m.key] || 0).toLocaleString()}</td>
+                        ))}
+                      </tr>
+                   ))}
+
+                   <tr className="bg-rose-100 font-black"><td className="p-2 text-left border-r border-slate-200">Cash Out</td>{months.map(m => <td key={m.key} className="p-2 border-b border-slate-200">{(overallData.cashOut[m.key] || 0).toLocaleString()}</td>)}</tr>
+
+                   <tr className="bg-slate-800 text-white font-black text-sm"><td className="p-3 text-left border-r border-slate-700">Net</td>{months.map(m => <td key={m.key} className="p-3 border-b border-slate-700">{(overallData.net[m.key] || 0).toLocaleString()}</td>)}</tr>
                 </tbody>
               </table>
-            ) : (
-              // Daily view for selected month
-              (() => {
-                const sel = months.find(m => m.key === selectedMonthKey) || months[0];
-                const year = sel.year;
-                const monthIndex = sel.month; // 0-based
-                const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-                const dayKeys = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+            </div>
+          </div>
+        )}
+      </div>
 
-                return (
-                  <table className="w-full text-left text-sm table-fixed">
-                    <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
-                      <tr>
-                        <th className="px-4 py-3 w-64">Category / Expense</th>
-                        {dayKeys.map(d => <th key={d} className="px-2 py-2 text-center">{d}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {categories.map(cat => (
-                        <tr key={cat.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 font-medium">{cat.name}</td>
-                          {dayKeys.map(d => {
-                            const key = `${year}-${monthIndex + 1}`;
-                            const v = itemsForCell(cat.id, key, d).reduce((s, it) => s + it.amount, 0);
-                            return <td key={d} onClick={() => openCellModal(cat.id, key, d)} className="px-2 py-2 text-right cursor-pointer hover:bg-slate-50">{v ? v.toLocaleString() : '-'}</td>;
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                );
-              })()
-            )}
+      {/* Detail Modal */}
+      {cellModal.open && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-xl p-6 w-[600px] max-w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+               <h4 className="font-bold">Items Detail</h4>
+               <button onClick={() => setCellModal({ ...cellModal, open: false })}><i className="fas fa-times"></i></button>
+            </div>
+            <div className="space-y-2">
+              {modalList.length === 0 && <p className="text-slate-400">No items found.</p>}
+              {modalList.map(it => (
+                <div key={it.id} className="border p-2 rounded flex justify-between items-center text-sm">
+                   <div>
+                     <div className="font-bold">{it.description || '(No desc)'}</div>
+                     <div className="text-xs text-slate-500">{it.date} • {it.amount.toLocaleString()}</div>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <button onClick={() => {
+                        const newAmt = prompt('New Amount', String(it.amount));
+                        if (newAmt !== null) updateItem({ ...it, amount: Number(newAmt) });
+                     }} className="text-indigo-600 hover:text-indigo-800">Edit</button>
+                     <button onClick={() => { if(confirm('Delete?')) deleteItem(it.id); }} className="text-rose-500 hover:text-rose-700">Delete</button>
+                   </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-        </div>
+      )}
 
-        {/* Right-side compact sidebar (static) - beside the table */}
-        <div className="w-72 bg-white border border-slate-100 rounded-lg shadow-sm p-4 flex-shrink-0">
-          <h5 className="text-sm font-bold text-slate-700 mb-3">Quick Actions</h5>
-
-        <div className="mb-4">
-          <p className="text-xs font-semibold text-slate-500 mb-2">Add Bank</p>
-          <BankForm />
-        </div>
-
-        <div className="mb-4">
-          <p className="text-xs font-semibold text-slate-500 mb-2">Add Expense Group</p>
-          <GroupForm />
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-slate-500 mb-2">Add Category</p>
-          <CategoryForm />
-        </div>
-      </div>
-      </div>
     </div>
   );
 };

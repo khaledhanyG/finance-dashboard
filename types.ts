@@ -124,19 +124,26 @@ export interface AppState {
   cashFlowForecast?: CashFlowItem[];
 }
 
+export interface Company {
+  id: string;
+  name: string;
+}
+
 export interface Bank {
   id: string;
   name: string;
   balance: number;
+  companyId?: string;
   currency?: string;
 }
 
 export interface CashFlowItem {
   id: string;
-  bankId: string;
+  companyId?: string;
+  bankId?: string;
   date: string; // ISO date
   categoryId?: string;
   amount: number;
-  type: 'expense' | 'inflow';
+  type: 'expense' | 'inflow_b2b' | 'inflow_b2c';
   description?: string;
 }

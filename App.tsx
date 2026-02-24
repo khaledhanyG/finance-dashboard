@@ -79,7 +79,7 @@ const App: React.FC = () => {
 
     // Execute Sync
     // We only sync specific keys that map to tables
-      const SYNC_KEYS = ['departments', 'employees', 'expenseGroups', 'expenseCategories', 'incomeServices', 'tasks', 'users', 'banks', 'cashFlowForecast'];
+      const SYNC_KEYS = ['departments', 'employees', 'expenseGroups', 'expenseCategories', 'incomeServices', 'tasks', 'users', 'companies', 'banks', 'cashFlowForecast'];
     if (!SYNC_KEYS.includes(key)) return;
 
     for (const item of addedOrUpdated) {

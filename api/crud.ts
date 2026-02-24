@@ -11,7 +11,10 @@ const TABLE_MAP: Record<string, string> = {
   expenseCategories: 'ExpenseCategory',
   incomeServices: 'IncomeService',
   tasks: 'Task',
-  users: 'User'
+  users: 'User',
+  companies: 'Company',
+  banks: 'Bank',
+  cashFlowForecast: 'CashFlowItem'
 };
 
 

@@ -89,6 +89,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const incomeRefundItemsRes = await client.query('SELECT * FROM "IncomeRefundItem"');
     const tasksRes = await client.query('SELECT * FROM "Task"');
     const usersRes = await client.query('SELECT id, email, name, role, permissions FROM "User"'); // Load users without passwords
+    const companiesRes = await client.query('SELECT * FROM "Company"');
+    const banksRes = await client.query('SELECT * FROM "Bank"');
+    const cashFlowForecastRes = await client.query('SELECT * FROM "CashFlowItem"');
 
     const incomeEntries = incomeEntriesRes.rows.map(mapIncome).map(inc => ({
       ...inc,
@@ -106,7 +109,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       outstandingExpenses: outstandingExpensesRes.rows.map((r: any) => ({ ...r, amount: Number(r.amount), date: r.date ? r.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0] })),
       incomeEntries,
       tasks: tasksRes.rows.map(mapTask),
-      users: usersRes.rows
+      users: usersRes.rows,
+      companies: companiesRes.rows,
+      banks: banksRes.rows.map((r: any) => ({ ...r, balance: Number(r.balance) })),
+      cashFlowForecast: cashFlowForecastRes.rows.map((r: any) => ({ ...r, amount: Number(r.amount), date: r.date ? r.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0] }))
     };
 
     res.status(200).json(state);

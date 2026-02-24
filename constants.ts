@@ -12,8 +12,8 @@ export const INITIAL_STATE: AppState = {
   expenseEntries: [],
   incomeEntries: [],
   outstandingExpenses: [],
-  tasks: []
-  ,
+  tasks: [],
+  companies: [],
   banks: [],
   cashFlowForecast: []
 };
