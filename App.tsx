@@ -89,12 +89,23 @@ const App: React.FC = () => {
       const SYNC_KEYS = ['departments', 'employees', 'expenseGroups', 'expenseCategories', 'incomeServices', 'tasks', 'users', 'companies', 'banks', 'cashFlowForecast'];
     if (!SYNC_KEYS.includes(key)) return;
 
+    // Retry logic
+    const saveItem = async (item: any) => {
+      try {
+        const res = await fetch(`/api/crud?entity=${key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
+        if (!res.ok) throw new Error(await res.text());
+      } catch (e) {
+        console.error(`Failed to sync ${key}:`, e);
+        // Optional: Implement retry queue or user notification
+      }
+    };
+
     for (const item of addedOrUpdated) {
-      await fetch(`/api/crud?entity=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item)
-      }).catch(console.error);
+      await saveItem(item);
     }
     for (const item of removed) {
       await fetch(`/api/crud?entity=${key}&id=${item.id}`, { method: 'DELETE' }).catch(console.error);

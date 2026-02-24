@@ -37,6 +37,10 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
   const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly'); // Keeping simple for now
   const [cellModal, setCellModal] = useState<{ open: boolean; companyId?: string; monthKey?: string; type?: string; category?: string; bankId?: string }>({ open: false });
 
+  // Edit State
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ date: '', amount: '', description: '' });
+
   // --- Handlers ---
   const handleAddCompany = () => {
     if (!companyName) return alert('Enter company name');
@@ -76,13 +80,32 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
     };
 
     if (entryForm.recurring) {
-      const year = baseDate.getFullYear();
-      let month = baseDate.getMonth();
-      let cur = new Date(year, month, baseDate.getDate());
+      const targetDay = baseDate.getDate();
+      let currentMonth = baseDate.getMonth();
+      let currentYear = baseDate.getFullYear();
+
+      let cur = new Date(currentYear, currentMonth, targetDay);
+
       while (cur <= end) {
         created.push({ ...itemBase, id: `cf-${Date.now()}-${created.length}`, date: cur.toISOString().slice(0,10) });
-        month++;
-        cur = new Date(cur.getFullYear(), month, baseDate.getDate());
+
+        // Increment month
+        currentMonth++;
+        if (currentMonth > 11) {
+          currentMonth = 0;
+          currentYear++;
+        }
+
+        // Try to set to target day
+        const nextDate = new Date(currentYear, currentMonth, targetDay);
+
+        // Check for overflow (e.g. Jan 31 -> Feb 28/29)
+        if (nextDate.getMonth() !== currentMonth) {
+           // Overflowed, set to last day of intended month
+           cur = new Date(currentYear, currentMonth + 1, 0);
+        } else {
+           cur = nextDate;
+        }
       }
     } else {
       created.push({ ...itemBase, id: `cf-${Date.now()}`, date: entryForm.date });
@@ -101,6 +124,19 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
     onUpdate({ cashFlowForecast: items.map(i => i.id === newItem.id ? newItem : i) });
   };
 
+  const startEdit = (item: CashFlowItem) => {
+    setEditingId(item.id);
+    setEditForm({ date: item.date, amount: String(item.amount), description: item.description || '' });
+  };
+
+  const saveEdit = () => {
+    if (!editingId) return;
+    const item = items.find(i => i.id === editingId);
+    if (!item) return;
+
+    updateItem({ ...item, date: editForm.date, amount: Number(editForm.amount), description: editForm.description });
+    setEditingId(null);
+  };
 
   // --- Data Processing ---
   const months = useMemo(() => {
@@ -348,7 +384,10 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
              <input placeholder="Desc" value={entryForm.description} onChange={e => setEntryForm({ ...entryForm, description: e.target.value })} className="flex-1 border rounded px-2 py-1" />
 
              <div className="flex items-center gap-1">
-                <input type="checkbox" checked={entryForm.recurring} onChange={e => setEntryForm({ ...entryForm, recurring: e.target.checked })} />
+                <label className="text-xs flex items-center gap-1 cursor-pointer select-none text-slate-600 font-bold">
+                   <input type="checkbox" className="mr-1" checked={entryForm.recurring} onChange={e => setEntryForm({ ...entryForm, recurring: e.target.checked })} />
+                   RECURRING?
+                </label>
                 <button type="submit" className="bg-amber-600 text-white px-3 py-1 rounded hover:bg-amber-700">Add</button>
              </div>
           </form>
@@ -466,18 +505,31 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
             <div className="space-y-2">
               {modalList.length === 0 && <p className="text-slate-400">No items found.</p>}
               {modalList.map(it => (
-                <div key={it.id} className="border p-2 rounded flex justify-between items-center text-sm">
-                   <div>
-                     <div className="font-bold">{it.description || '(No desc)'}</div>
-                     <div className="text-xs text-slate-500">{it.date} • {it.amount.toLocaleString()}</div>
-                   </div>
-                   <div className="flex items-center gap-2">
-                     <button onClick={() => {
-                        const newAmt = prompt('New Amount', String(it.amount));
-                        if (newAmt !== null) updateItem({ ...it, amount: Number(newAmt) });
-                     }} className="text-indigo-600 hover:text-indigo-800">Edit</button>
-                     <button onClick={() => { if(confirm('Delete?')) deleteItem(it.id); }} className="text-rose-500 hover:text-rose-700">Delete</button>
-                   </div>
+                <div key={it.id} className="border p-2 rounded flex flex-col gap-2 text-sm bg-slate-50">
+                   {editingId === it.id ? (
+                      <div className="flex flex-col gap-2 w-full">
+                         <div className="flex gap-2">
+                            <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})} className="border rounded px-2 py-1 text-xs" />
+                            <input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})} className="border rounded px-2 py-1 w-24 text-xs" />
+                         </div>
+                         <input value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} className="border rounded px-2 py-1 w-full text-xs" placeholder="Description" />
+                         <div className="flex gap-2 justify-end">
+                            <button onClick={() => setEditingId(null)} className="text-slate-500 text-xs hover:underline">Cancel</button>
+                            <button onClick={saveEdit} className="bg-indigo-600 text-white px-3 py-1 rounded text-xs hover:bg-indigo-700">Save</button>
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="flex justify-between items-center w-full">
+                         <div>
+                           <div className="font-bold text-slate-700">{it.description || '(No desc)'}</div>
+                           <div className="text-xs text-slate-500">{it.date} • {it.amount.toLocaleString()}</div>
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <button onClick={() => startEdit(it)} className="text-indigo-600 hover:text-indigo-800 font-medium">Edit</button>
+                           <button onClick={() => { if(confirm('Delete?')) deleteItem(it.id); }} className="text-rose-500 hover:text-rose-700 font-medium">Delete</button>
+                         </div>
+                      </div>
+                   )}
                 </div>
               ))}
             </div>
