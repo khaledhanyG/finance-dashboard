@@ -170,33 +170,33 @@ const CashFlowForecast: React.FC<{ state: AppState; onUpdate: (s: Partial<AppSta
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
       <h4 className="text-xl font-bold text-slate-800 mb-4">Cash Flow Forecast</h4>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-1">
-          <h5 className="text-sm font-bold text-slate-600 mb-2">Banks</h5>
-          <ul className="space-y-3">
+      <div className="flex flex-col gap-6">
+        <div>
+          <h5 className="text-sm font-bold text-slate-600 mb-3">Banks</h5>
+          <div className="flex flex-wrap gap-3 items-start">
+            {banks.length === 0 && <div className="text-slate-400 italic">No banks configured. Add banks in Organization &gt; Configuration.</div>}
             {banks.map(b => (
-              <li key={b.id} className="p-3 border border-slate-100 rounded-lg bg-slate-50 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-slate-800">{b.name}</div>
-                  <div className="text-xs text-slate-500">Balance: <span className="font-bold text-indigo-600">{b.balance.toLocaleString()}</span></div>
+              <div key={b.id} className="p-2 border border-slate-100 rounded-md bg-slate-50 flex items-center gap-3 w-44 text-sm">
+                <div className="flex-1">
+                  <div className="font-medium text-slate-800 truncate">{b.name}</div>
+                  <div className="text-[11px] text-slate-500">Balance: <span className="font-bold text-indigo-600">{b.balance.toLocaleString()}</span></div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div>
                   {editingBankId === b.id ? (
                     <div className="flex items-center gap-2">
-                      <input type="number" value={bankEditValue} onChange={e => setBankEditValue(e.target.value)} className="w-24 border rounded px-2 py-1 text-sm" />
-                      <button onClick={() => handleBankSave({ ...b, balance: Number(bankEditValue || 0) })} className="bg-emerald-600 text-white px-3 py-1 rounded">Save</button>
+                      <input type="number" value={bankEditValue} onChange={e => setBankEditValue(e.target.value)} className="w-20 border rounded px-2 py-1 text-sm" />
+                      <button onClick={() => handleBankSave({ ...b, balance: Number(bankEditValue || 0) })} className="bg-emerald-600 text-white px-2 py-1 rounded text-xs">Save</button>
                     </div>
                   ) : (
-                    <button onClick={() => { setEditingBankId(b.id); setBankEditValue(String(b.balance || 0)); }} className="text-slate-400 hover:text-indigo-600 p-2"><i className="fas fa-pen"></i></button>
+                    <button onClick={() => { setEditingBankId(b.id); setBankEditValue(String(b.balance || 0)); }} className="text-slate-400 hover:text-indigo-600 p-1"><i className="fas fa-pen"></i></button>
                   )}
                 </div>
-              </li>
+              </div>
             ))}
-            {banks.length === 0 && <li className="text-slate-400 italic">No banks configured. Add banks in Organization &gt; Configuration.</li>}
-          </ul>
+          </div>
         </div>
 
-        <div className="md:col-span-2">
+        <div>
           <form onSubmit={handleAdd} className="flex gap-2 items-end mb-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
             <div className="flex-1">
               <label className="block text-xs text-slate-500 uppercase font-bold mb-1">Bank</label>
