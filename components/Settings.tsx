@@ -97,7 +97,15 @@ export const Settings: React.FC<SettingsProps> = ({ state, onUpdate, onDelete })
                 expenseCategories: state.expenseCategories.filter(c => c.groupId !== group.id)
               });
             })}
-            onRemoveCategory={(cat) => onDelete(cat.name, () => removeItem('expenseCategories', cat.id))}
+            onRemoveCategory={(cat) => {
+              const usedInExpenses = state.expenseEntries.some(e => e.categoryId === cat.id);
+              const usedInIncomeCogs = state.incomeEntries.some(i => (i.cogsItems || []).some(ci => ci.categoryId === cat.id));
+              if (usedInExpenses || usedInIncomeCogs) {
+                alert('This category is used in historical entries and cannot be deleted.');
+                return;
+              }
+              onDelete(cat.name, () => removeItem('expenseCategories', cat.id));
+            }}
           />
         )}
         {activeTab === 'income' && isAdmin && (
